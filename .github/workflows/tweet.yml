@@ -1,11 +1,14 @@
 name: tweet-bot
 
 on:
-  workflow_dispatch: {}          # lets you run it manually
-  schedule:                      # runs automatically (UTC time)
+  workflow_dispatch: {}
+  schedule:
     # 09:15 IST == 03:45 UTC; 17:15 IST == 11:45 UTC
     - cron: '45 3 * * *'
     - cron: '45 11 * * *'
+
+permissions:
+  contents: read
 
 jobs:
   tweet:
@@ -13,14 +16,32 @@ jobs:
     timeout-minutes: 10
     concurrency:
       group: tweet-bot
-      cancel-in-progress: false
+      cancel-in-progress: true
+
+    env:
+      # Secrets
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      TWITTER_API_KEY: ${{ secrets.TWITTER_API_KEY }}
+      TWITTER_API_SECRET: ${{ secrets.TWITTER_API_SECRET }}
+      TWITTER_ACCESS_TOKEN: ${{ secrets.TWITTER_ACCESS_TOKEN }}
+      TWITTER_ACCESS_TOKEN_SECRET: ${{ secrets.TWITTER_ACCESS_TOKEN_SECRET }}
+      # Vars (with safe defaults)
+      OPENAI_MODEL: ${{ vars.OPENAI_MODEL || 'gpt-5-nano' }}
+      FALLBACK_MODEL: ${{ vars.FALLBACK_MODEL || 'gpt-4o-mini' }}
+      OPENAI_MAX_COMPLETION_TOKENS: ${{ vars.OPENAI_MAX_COMPLETION_TOKENS || 120 }}
+      TWEET_TOPICS: ${{ vars.TWEET_TOPICS }}
+      TWEET_TIMES_IST: ${{ vars.TWEET_TIMES_IST || '09:15,17:15' }}
+      LOGLEVEL: ${{ vars.LOGLEVEL || 'INFO' }}
+      OPENAI_USE_MODERATION: ${{ vars.OPENAI_USE_MODERATION || 'true' }}
+      DRY_RUN: ${{ vars.DRY_RUN || 'false' }}
+      RUN_ONCE: "true"
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11  # v4
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@82c7e631bb3cdc910f68e0081d67478d79c6982d  # v5
         with:
           python-version: '3.11'
           cache: 'pip'
@@ -30,7 +51,17 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Optional jitter (avoid exact minute posts)
+      - name: Validate required secrets
+        run: |
+          for v in OPENAI_API_KEY TWITTER_API_KEY TWITTER_API_SECRET TWITTER_ACCESS_TOKEN TWITTER_ACCESS_TOKEN_SECRET; do
+            if [ -z "${!v}" ]; then
+              echo "::error title=Missing secret::$v is not set"
+              exit 1
+            fi
+          done
+
+      - name: Optional jitter (schedule only)
+        if: github.event_name == 'schedule'
         env:
           JITTER_MAX: 120
         run: |
@@ -42,22 +73,4 @@ jobs:
           PY
 
       - name: Run bot (single post)
-        env:
-          # Secrets
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          TWITTER_API_KEY: ${{ secrets.TWITTER_API_KEY }}
-          TWITTER_API_SECRET: ${{ secrets.TWITTER_API_SECRET }}
-          TWITTER_ACCESS_TOKEN: ${{ secrets.TWITTER_ACCESS_TOKEN }}
-          TWITTER_ACCESS_TOKEN_SECRET: ${{ secrets.TWITTER_ACCESS_TOKEN_SECRET }}
-    
-          # Vars (repo/org level) — map them explicitly
-          OPENAI_MODEL: ${{ vars.OPENAI_MODEL }}            # e.g. gpt-5-nano
-          FALLBACK_MODEL: ${{ vars.FALLBACK_MODEL }}        # e.g. gpt-4o-mini
-          OPENAI_MAX_COMPLETION_TOKENS: ${{ vars.OPENAI_MAX_COMPLETION_TOKENS || 120 }}
-          TWEET_TOPICS: ${{ vars.TWEET_TOPICS }}
-          TWEET_TIMES_IST: ${{ vars.TWEET_TIMES_IST || '09:15,17:15' }}
-          LOGLEVEL: ${{ vars.LOGLEVEL || 'INFO' }}
-          OPENAI_USE_MODERATION: ${{ vars.OPENAI_USE_MODERATION || 'true' }}
-          DRY_RUN: ${{ vars.DRY_RUN || 'false' }}
-          RUN_ONCE: "true"  # if you’re triggering on a schedule and want one-shot execution
         run: python twitter_bot.py
