@@ -1,3 +1,40 @@
+# Python caches & build
 __pycache__/
-.env
+*.py[cod]
+*.so
+build/
+dist/
+*.egg-info/
+
+# Virtualenv / tooling
 .venv/
+.env
+.env.*
+.envrc
+.direnv/
+.python-version
+
+# OS/editor cruft
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+
+# Logs & coverage
+*.log
+logs/
+coverage.xml
+.coverage*
+htmlcov/
+
+# Databases & artifacts
+*.sqlite*
+*.db
+*.pkl
+*.zip
+*.tar
+*.gz
+
+# Jupyter (if used)
+.ipynb_checkpoints/
