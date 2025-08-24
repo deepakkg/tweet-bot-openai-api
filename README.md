@@ -64,7 +64,7 @@ Add these (non-secret config):
 ---
 
 ## Run locally (optional)
-# For testing before deploying:
+### For testing before deploying:
 - `Create a .env file in the repo root:` 
 - `OPENAI_API_KEY=sk-your-openai-key` 
 - `TWITTER_API_KEY=your-twitter-key` 
