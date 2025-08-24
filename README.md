@@ -64,7 +64,18 @@ Add these (non-secret config):
 ---
 
 ## Run locally (optional)
-For testing before deploying:
+# For testing before deploying:
+- `Create a .env file in the repo root:` 
+- `OPENAI_API_KEY=sk-your-openai-key` 
+- `TWITTER_API_KEY=your-twitter-key` 
+- `TWITTER_API_SECRET=your-twitter-secret` 
+- `TWITTER_ACCESS_TOKEN=your-access-token`
+- `TWITTER_ACCESS_TOKEN_SECRET=your-access-secret`
+- `DRY_RUN=true`
+- `RUN_ONCE=true`
+- `OPENAI_MODEL=gpt-5-nano`
+- `FALLBACK_MODEL=gpt-4o-mini`
+
 
 ```bash
 git clone <your-fork-url>
@@ -72,3 +83,4 @@ cd tweet-bot
 python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
+python twitter_bot.py
