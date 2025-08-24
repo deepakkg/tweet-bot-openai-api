@@ -195,6 +195,40 @@ def _extract_text_from_chat_completion(resp) -> str:
     except Exception:
         return ""
 
+def _build_plain_prompt(topic: str) -> str:
+    # Single-string prompt works best with gpt-5-nano via Responses API.
+    return (
+        "You are a tweet generator. Produce ONE original tweet <=240 characters.\n"
+        "Rules:\n"
+        "- Output plain text only. No markdown, code fences, quotes, or prefixes.\n"
+        "- No emojis, hashtags, @mentions, or links/URLs.\n"
+        "- No numbers that look like IDs; no personal data.\n"
+        "- Keep it specific, useful, and self-contained.\n"
+        "- If your draft exceeds 240 characters, shorten it and output only the final <=240 char version.\n\n"
+        f'Topic: "{topic}"\n'
+        "Return ONLY the tweet text and nothing else."
+    )
+
+
+def _extract_text_from_responses(resp) -> str:
+    # New SDKs expose `output_text`. Fall back to traversing generic `output`.
+    text = getattr(resp, "output_text", None)
+    if isinstance(text, str) and text.strip():
+        return text.strip()
+
+    out = []
+    # resp.output can be a list of parts; each part may have .type/.content
+    for item in getattr(resp, "output", []) or []:
+        i_type = getattr(item, "type", None) or (isinstance(item, dict) and item.get("type"))
+        content = getattr(item, "content", None) or (isinstance(item, dict) and item.get("content"))
+        if isinstance(content, list):
+            for part in content:
+                p_type = getattr(part, "type", None) or (isinstance(part, dict) and part.get("type"))
+                p_text = getattr(part, "text", None) or (isinstance(part, dict) and part.get("text"))
+                if isinstance(p_text, str):
+                    out.append(p_text)
+    return "\n".join(out).strip()
+
 # ------------- OpenAI moderation (optional) -------------
 def openai_moderation_flagged(client, text: str) -> bool:
     """
@@ -259,94 +293,41 @@ def _supports_sampling_params(model: str) -> bool:
 
 def fetch_tweet_from_openai(client, topic: str) -> str:
     """
-    Generate a tweet with the appropriate params for the active SDK and model.
-    - New SDK (>=1.x): use chat.completions.create with max_completion_tokens.
-    - Omit sampling params for models that reject them (e.g., gpt-5-nano).
-    - Force plain-text via response_format to avoid non-text content parts.
-    - Legacy SDK: keep temperature + max_tokens.
-    - One extra stricter retry if first comes back empty.
+    Force the Responses API for gpt-5-nano. Optionally try a FALLBACK_MODEL via Responses too.
+    No Chat Completions here (it’s what’s returning empty bodies for you).
     """
-    base_messages = [
-        {"role": "system", "content": SYSTEM_PROMPT},
-        {"role": "user", "content": USER_PROMPT_TEMPLATE.format(topic=topic)},
-    ]
-
-    def _strict_messages():
-        return [
-            {"role": "system", "content": SYSTEM_PROMPT + " Reply with ONLY the tweet text. No quotes, no preface."},
-            {"role": "user", "content": USER_PROMPT_TEMPLATE.format(topic=topic)},
-        ]
-
     max_tok = int(os.getenv("OPENAI_MAX_COMPLETION_TOKENS", "120"))
+    prompt = _build_plain_prompt(topic)
 
-    if _OPENAI_SDK == "v1":
-        # First try
-        kwargs = dict(
-            model=OPENAI_MODEL,
-            messages=base_messages,
-            max_completion_tokens=max_tok,
-            response_format={"type": "text"},  # <-- force plain text
-        )
-        if _supports_sampling_params(OPENAI_MODEL):
-            kwargs["temperature"] = 0.7
+    models = [os.getenv("OPENAI_MODEL", "gpt-5-nano").strip()]
+    fb = os.getenv("FALLBACK_MODEL", "").strip()
+    if fb and fb not in models:
+        models.append(fb)
 
+    last_error = None
+    for m in models:
         try:
-            resp = client.chat.completions.create(**kwargs)
-        except Exception as e:
-            msg = str(e).lower()
-            if "unsupported value" in msg or "does not support" in msg:
-                kwargs.pop("temperature", None)
-                kwargs.pop("top_p", None)
-                resp = client.chat.completions.create(**kwargs)
+            # Keep it minimal—some small models reject sampling knobs/etc.
+            resp = client.responses.create(
+                model=m,
+                input=prompt,
+                max_output_tokens=max_tok,
+                # Avoid temperature/top_p for nano; avoid extra fields like modalities unless required
+            )
+            text = _extract_text_from_responses(resp)
+            log_raw_reply(text, topic)
+            if text:
+                return text
             else:
-                raise
+                log.info(f"Model {m} returned empty text; trying next (if any).")
+        except Exception as e:
+            last_error = e
+            log.debug(f"Responses API error with model={m}: {type(e).__name__}: {str(e)[:200]}")
 
-        raw = _extract_text_from_chat_completion(resp)
-        log_raw_reply(raw, topic)
-
-        cleaned = (raw or "").strip()
-        if cleaned:
-            return cleaned
-
-        # Strict retry if empty
-        kwargs["messages"] = _strict_messages()
-        resp2 = client.chat.completions.create(**kwargs)
-        raw2 = _extract_text_from_chat_completion(resp2)
-        log_raw_reply(raw2, topic)
-        return (raw2 or "").strip()
-
-    else:
-        # Legacy SDK path
-        try:
-            resp = client.ChatCompletion.create(
-                model=OPENAI_MODEL,
-                messages=base_messages,
-                temperature=0.7,
-                max_tokens=max_tok,
-            )
-        except Exception:
-            resp = client.ChatCompletion.create(
-                model=OPENAI_MODEL,
-                messages=base_messages,
-                max_tokens=max_tok,
-            )
-
-        # Legacy responses are dict-shaped; reuse extractor which handles both
-        raw = _extract_text_from_chat_completion(resp)
-        log_raw_reply(raw, topic)
-
-        if raw and raw.strip():
-            return raw.strip()
-
-        # Strict retry if empty
-        resp2 = client.ChatCompletion.create(
-            model=OPENAI_MODEL,
-            messages=_strict_messages(),
-            max_tokens=max_tok,
-        )
-        raw2 = _extract_text_from_chat_completion(resp2)
-        log_raw_reply(raw2, topic)
-        return (raw2 or "").strip()
+    # Nothing usable
+    if last_error:
+        log.debug(f"All models failed; last error: {type(last_error).__name__}: {last_error}")
+    return ""
 
 def generate_valid_tweet(max_retries: int = MAX_RETRIES) -> Tuple[str, List[str]]:
     """
