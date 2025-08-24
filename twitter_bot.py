@@ -182,78 +182,141 @@ USER_PROMPT_TEMPLATE = (
     "Do not include links, @mentions, hashtags, or quotes."
 )
 
+def _supports_sampling_params(model: str) -> bool:
+    """
+    Returns False for models that reject sampling knobs like temperature/top_p.
+    gpt-5-* models (e.g., gpt-5-nano) are treated as no-sampling models.
+    """
+    m = (model or "").lower()
+    if m.startswith("gpt-5-"):
+        return False
+    return True
+
+
 def fetch_tweet_from_openai(client, topic: str) -> str:
+    """
+    Generate a tweet with the appropriate params for the active SDK and model.
+    - New SDK (>=1.x): use chat.completions.create with max_completion_tokens.
+    - Omit sampling params for models that reject them (e.g., gpt-5-nano).
+    - Legacy SDK: keep temperature + max_tokens.
+    """
+    messages = [
+        {"role": "system", "content": SYSTEM_PROMPT},
+        {"role": "user", "content": USER_PROMPT_TEMPLATE.format(topic=topic)},
+    ]
+
     if _OPENAI_SDK == "v1":
-        # New OpenAI SDK (>=1.x) requires max_completion_tokens
-        resp = client.chat.completions.create(
+        kwargs = dict(
             model=OPENAI_MODEL,
-            messages=[
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": USER_PROMPT_TEMPLATE.format(topic=topic)},
-            ],
-            temperature=0.7,
-            max_completion_tokens=120   # <-- patched here
+            messages=messages,
+            max_completion_tokens=int(os.getenv("OPENAI_MAX_COMPLETION_TOKENS", "120"))
         )
+        if _supports_sampling_params(OPENAI_MODEL):
+            kwargs["temperature"] = 0.7
+        try:
+            resp = client.chat.completions.create(**kwargs)
+        except Exception as e:
+            msg = str(e).lower()
+            # Retry without sampling knobs if API rejects them
+            if "unsupported value" in msg or "does not support" in msg:
+                kwargs.pop("temperature", None)
+                kwargs.pop("top_p", None)
+                resp = client.chat.completions.create(**kwargs)
+            else:
+                raise
         return resp.choices[0].message.content.strip()
     else:
-        # Legacy SDK (<1.x) still uses max_tokens
-        resp = client.ChatCompletion.create(
-            model=OPENAI_MODEL,
-            messages=[
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": USER_PROMPT_TEMPLATE.format(topic=topic)},
-            ],
-            temperature=0.7,
-            max_tokens=120              # <-- keep this for legacy
-        )
+        # Legacy SDK path
+        try:
+            resp = client.ChatCompletion.create(
+                model=OPENAI_MODEL,
+                messages=messages,
+                temperature=0.7,
+                max_tokens=int(os.getenv("OPENAI_MAX_COMPLETION_TOKENS", "120"))
+            )
+        except Exception:
+            # Fallback without temperature if even legacy complains
+            resp = client.ChatCompletion.create(
+                model=OPENAI_MODEL,
+                messages=messages,
+                max_tokens=int(os.getenv("OPENAI_MAX_COMPLETION_TOKENS", "120"))
+            )
         return resp["choices"][0]["message"]["content"].strip()
 
+
 def generate_valid_tweet(max_retries: int = MAX_RETRIES) -> Tuple[str, List[str]]:
+    """
+    Generate a validated tweet, retrying on:
+      - OpenAI API errors from fetch_tweet_from_openai (429/5xx/param issues)
+      - Length > 280
+      - Profanity / PII
+      - OpenAI moderation flags (if enabled)
+
+    Returns: (tweet_text, errors_list)
+    Raises: RuntimeError after exhausting retries.
+    """
     client = openai_client()
     errors: List[str] = []
 
-    delay = 1.5
+    delay = 1.5  # seconds (exponential backoff)
     for attempt in range(1, max_retries + 1):
         topic = random.choice(TOPICS)
-        text = fetch_tweet_from_openai(client, topic)
+
+        # --- Generation with graceful error handling ---
+        try:
+            text = fetch_tweet_from_openai(client, topic)
+        except Exception as e:
+            em = f"Attempt {attempt}: OpenAI generation error: {type(e).__name__}: {str(e)[:200]}"
+            log.warning(em)
+            errors.append(em)
+            time.sleep(delay)
+            delay = min(delay * 1.8, 15)
+            continue
 
         # Basic trim/cleanup
-        text = text.strip().strip('"').strip()
+        text = (text or "").strip().strip('"').strip()
 
-        # Validation
+        # --- Validation checks ---
         if not length_ok(text):
-            errors.append(f"Attempt {attempt}: length {len(text)} > 280")
-            log.info(errors[-1])
+            msg = f"Attempt {attempt}: length {len(text)} > 280"
+            log.info(msg)
+            errors.append(msg)
             time.sleep(delay)
             delay = min(delay * 1.8, 12)
             continue
 
-        p = contains_profanity(text)
-        if p:
-            errors.append(f"Attempt {attempt}: {p}")
-            log.info(errors[-1])
+        prof = contains_profanity(text)
+        if prof:
+            msg = f"Attempt {attempt}: {prof}"
+            log.info(msg)
+            errors.append(msg)
             time.sleep(delay)
             delay = min(delay * 1.8, 12)
             continue
 
         pii = contains_pii(text)
         if pii:
-            errors.append(f"Attempt {attempt}: {pii}")
-            log.info(errors[-1])
+            msg = f"Attempt {attempt}: {pii}"
+            log.info(msg)
+            errors.append(msg)
             time.sleep(delay)
             delay = min(delay * 1.8, 12)
             continue
 
         if USE_MODERATION and openai_moderation_flagged(client, text):
-            errors.append(f"Attempt {attempt}: OpenAI moderation flagged")
-            log.info(errors[-1])
+            msg = "Attempt {attempt}: OpenAI moderation flagged"
+            log.info(msg)
+            errors.append(msg)
             time.sleep(delay)
             delay = min(delay * 1.8, 12)
             continue
 
+        # Passed all checks
         return text, errors
 
+    # Exhausted retries
     raise RuntimeError(f"Failed to produce a valid tweet after {max_retries} attempts. Issues: {errors}")
+
 
 # ------------- Posting -------------
 def post_tweet(text: str) -> Optional[int]:
