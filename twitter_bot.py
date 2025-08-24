@@ -323,9 +323,16 @@ def post_tweet(text: str) -> Optional[int]:
     if DRY_RUN:
         log.info(f"[DRY_RUN] Would tweet ({len(text)} chars): {text}")
         return None
-
     client = twitter_client()
-    resp = client.create_tweet(text=text)
+    try:
+        resp = client.create_tweet(text=text)  # v2 POST /2/tweets
+    except tweepy.errors.Forbidden as e:
+        log.error(
+            "403 from X API. Check: App has OAuth 1.0a enabled, App permissions set to "
+            "Read & Write, and Access Token/Secret REGENERATED after the change. "
+            "Then update GitHub secrets TWITTER_ACCESS_TOKEN / TWITTER_ACCESS_TOKEN_SECRET."
+        )
+        raise
     tweet_id = getattr(resp, "data", {}).get("id")
     log.info(f"Tweet posted: https://twitter.com/i/web/status/{tweet_id}")
     return tweet_id
