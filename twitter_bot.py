@@ -160,6 +160,41 @@ def is_meaningful_text(text: str) -> bool:
         # Fallback if regex unicode props ever fail
         return bool(re.search(r"[A-Za-z0-9]", text or ""))
 
+def _extract_text_from_chat_completion(resp) -> str:
+    """
+    Robustly extract text from OpenAI chat completion responses.
+    Handles:
+      - message.content as a string
+      - message.content as a list of content parts (pick 'text' parts)
+    Returns "" if nothing textual is found.
+    """
+    try:
+        choice = resp.choices[0]
+        msg = getattr(choice, "message", None) or choice.get("message")
+        content = getattr(msg, "content", None)
+        if content is None and isinstance(msg, dict):
+            content = msg.get("content")
+
+        # Case 1: plain string
+        if isinstance(content, str):
+            return content
+
+        # Case 2: list of content parts (e.g., [{'type':'text','text':'...'}])
+        if isinstance(content, list):
+            out = []
+            for part in content:
+                if isinstance(part, dict):
+                    if part.get("type") == "text" and isinstance(part.get("text"), str):
+                        out.append(part["text"])
+                    # Some SDKs may return {'type':'output_text','text':'...'}
+                    elif part.get("type") == "output_text" and isinstance(part.get("text"), str):
+                        out.append(part["text"])
+            return "\n".join(out).strip()
+
+        return ""  # nothing usable
+    except Exception:
+        return ""
+
 # ------------- OpenAI moderation (optional) -------------
 def openai_moderation_flagged(client, text: str) -> bool:
     """
@@ -194,15 +229,21 @@ def openai_moderation_flagged(client, text: str) -> bool:
 
 # ------------- Tweet generation -------------
 SYSTEM_PROMPT = (
-    "You write high-signal, clean, **tweet-length** insights (<=240 chars) "
-    "for a broad professional audience. Avoid emojis, hashtags, links, m dashes, n dashes and numbers that look like IDs. "
-    "No personal info, no commands to the reader, and no profanity. Keep it crisp."
+    """You are a tweet generator. Produce a single original tweet <=240 characters.
+        Hard rules:
+        - Output plain text only. No markdown, code fences, quotes, or prefixes.
+        - No emojis, hashtags, @mentions, or links/URLs.
+        - No numbers that look like IDs; no personal data.
+        - Keep it specific, useful, and self-contained.
+        - If your draft exceeds 240 characters, shorten it and output only the final <=240 char version.
+        Return ONLY the tweet text and nothing else."""
 )
 
 USER_PROMPT_TEMPLATE = (
-    "Write one original tweet-length insight (<=240 chars) on the topic: '{topic}'. "
-    "Offer a specific idea, not a list. Avoid jargon; keep it useful, upbeat and quotable. "
-    "Do not include links, @mentions, hashtags, or quotes."
+    """Write one tweet (<=240 chars) about: "{topic}".
+        Focus on one concrete idea or tactic. Avoid lists, clichés, and generic advice.
+        You must output ONLY the final tweet text, nothing else. No quotes or formatting.
+        Constraints: <=240 characters, no emojis/hashtags/links/@mentions/PII."""
 )
 
 def _supports_sampling_params(model: str) -> bool:
@@ -221,51 +262,91 @@ def fetch_tweet_from_openai(client, topic: str) -> str:
     Generate a tweet with the appropriate params for the active SDK and model.
     - New SDK (>=1.x): use chat.completions.create with max_completion_tokens.
     - Omit sampling params for models that reject them (e.g., gpt-5-nano).
+    - Force plain-text via response_format to avoid non-text content parts.
     - Legacy SDK: keep temperature + max_tokens.
+    - One extra stricter retry if first comes back empty.
     """
-    messages = [
+    base_messages = [
         {"role": "system", "content": SYSTEM_PROMPT},
         {"role": "user", "content": USER_PROMPT_TEMPLATE.format(topic=topic)},
     ]
 
+    def _strict_messages():
+        return [
+            {"role": "system", "content": SYSTEM_PROMPT + " Reply with ONLY the tweet text. No quotes, no preface."},
+            {"role": "user", "content": USER_PROMPT_TEMPLATE.format(topic=topic)},
+        ]
+
+    max_tok = int(os.getenv("OPENAI_MAX_COMPLETION_TOKENS", "120"))
+
     if _OPENAI_SDK == "v1":
+        # First try
         kwargs = dict(
             model=OPENAI_MODEL,
-            messages=messages,
-            max_completion_tokens=int(os.getenv("OPENAI_MAX_COMPLETION_TOKENS", "120"))
+            messages=base_messages,
+            max_completion_tokens=max_tok,
+            response_format={"type": "text"},  # <-- force plain text
         )
         if _supports_sampling_params(OPENAI_MODEL):
             kwargs["temperature"] = 0.7
+
         try:
             resp = client.chat.completions.create(**kwargs)
         except Exception as e:
             msg = str(e).lower()
-            # Retry without sampling knobs if API rejects them
             if "unsupported value" in msg or "does not support" in msg:
                 kwargs.pop("temperature", None)
                 kwargs.pop("top_p", None)
                 resp = client.chat.completions.create(**kwargs)
             else:
                 raise
-        return resp.choices[0].message.content.strip()
+
+        raw = _extract_text_from_chat_completion(resp)
+        log_raw_reply(raw, topic)
+
+        cleaned = (raw or "").strip()
+        if cleaned:
+            return cleaned
+
+        # Strict retry if empty
+        kwargs["messages"] = _strict_messages()
+        resp2 = client.chat.completions.create(**kwargs)
+        raw2 = _extract_text_from_chat_completion(resp2)
+        log_raw_reply(raw2, topic)
+        return (raw2 or "").strip()
+
     else:
         # Legacy SDK path
         try:
             resp = client.ChatCompletion.create(
                 model=OPENAI_MODEL,
-                messages=messages,
+                messages=base_messages,
                 temperature=0.7,
-                max_tokens=int(os.getenv("OPENAI_MAX_COMPLETION_TOKENS", "120"))
+                max_tokens=max_tok,
             )
         except Exception:
-            # Fallback without temperature if even legacy complains
             resp = client.ChatCompletion.create(
                 model=OPENAI_MODEL,
-                messages=messages,
-                max_tokens=int(os.getenv("OPENAI_MAX_COMPLETION_TOKENS", "120"))
+                messages=base_messages,
+                max_tokens=max_tok,
             )
-        return resp["choices"][0]["message"]["content"].strip()
 
+        # Legacy responses are dict-shaped; reuse extractor which handles both
+        raw = _extract_text_from_chat_completion(resp)
+        log_raw_reply(raw, topic)
+
+        if raw and raw.strip():
+            return raw.strip()
+
+        # Strict retry if empty
+        resp2 = client.ChatCompletion.create(
+            model=OPENAI_MODEL,
+            messages=_strict_messages(),
+            max_tokens=max_tok,
+        )
+        raw2 = _extract_text_from_chat_completion(resp2)
+        log_raw_reply(raw2, topic)
+        return (raw2 or "").strip()
 
 def generate_valid_tweet(max_retries: int = MAX_RETRIES) -> Tuple[str, List[str]]:
     """
