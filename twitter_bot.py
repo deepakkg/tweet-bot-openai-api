@@ -55,11 +55,23 @@ except Exception:
     _OPENAI_SDK = "legacy"
 
 # ------------- Logging -------------
+loglevel = os.getenv("LOGLEVEL", "INFO").upper()
 logging.basicConfig(
-    level=logging.INFO,
+    level=getattr(logging, loglevel, logging.INFO),
     format="%(asctime)s %(levelname)s %(message)s"
 )
 log = logging.getLogger("twitter-bot")
+
+# Optional: show raw LLM replies when DEBUG
+def log_raw_reply(raw: str, topic: str):
+    """
+    Logs the raw OpenAI model reply before cleanup.
+    Only visible if logger is in DEBUG mode.
+    """
+    preview = (raw or "").replace("\n", "\\n")
+    if len(preview) > 200:
+        preview = preview[:200] + "..."
+    log.debug(f"Raw model reply for topic '{topic}': {preview}")
 
 # ------------- Config -------------
 IST = pytz.timezone("Asia/Kolkata")
@@ -136,6 +148,17 @@ def contains_pii(text: str) -> Optional[str]:
 def length_ok(text: str) -> bool:
     # Twitter limit 280 characters (codepoints). We'll enforce .__len__().
     return len(text) <= 280
+
+def is_meaningful_text(text: str) -> bool:
+    """
+    True if the tweet has at least one letter or digit (not just whitespace/punctuation).
+    Uses the 'regex' module for Unicode-aware classes.
+    """
+    try:
+        return bool(regex.search(r"[\p{L}\p{N}]", text))
+    except Exception:
+        # Fallback if regex unicode props ever fail
+        return bool(re.search(r"[A-Za-z0-9]", text or ""))
 
 # ------------- OpenAI moderation (optional) -------------
 def openai_moderation_flagged(client, text: str) -> bool:
@@ -265,6 +288,7 @@ def generate_valid_tweet(max_retries: int = MAX_RETRIES) -> Tuple[str, List[str]
         # --- Generation with graceful error handling ---
         try:
             text = fetch_tweet_from_openai(client, topic)
+            log_raw_reply(text, topic)   # <-- new debug hook
         except Exception as e:
             em = f"Attempt {attempt}: OpenAI generation error: {type(e).__name__}: {str(e)[:200]}"
             log.warning(em)
@@ -275,6 +299,16 @@ def generate_valid_tweet(max_retries: int = MAX_RETRIES) -> Tuple[str, List[str]
 
         # Basic trim/cleanup
         text = (text or "").strip().strip('"').strip()
+
+       # Reject empty or non-meaningful text
+
+        if not text or not is_meaningful_text(text):
+            msg = f"Attempt {attempt}: empty or non-meaningful text"
+            log.info(msg)
+            errors.append(msg)
+            time.sleep(delay)
+            delay = min(delay * 1.8, 12)
+            continue
 
         # --- Validation checks ---
         if not length_ok(text):
@@ -304,7 +338,7 @@ def generate_valid_tweet(max_retries: int = MAX_RETRIES) -> Tuple[str, List[str]
             continue
 
         if USE_MODERATION and openai_moderation_flagged(client, text):
-            msg = "Attempt {attempt}: OpenAI moderation flagged"
+            msg = f"Attempt {attempt}: OpenAI moderation flagged"
             log.info(msg)
             errors.append(msg)
             time.sleep(delay)
@@ -320,19 +354,27 @@ def generate_valid_tweet(max_retries: int = MAX_RETRIES) -> Tuple[str, List[str]
 
 # ------------- Posting -------------
 def post_tweet(text: str) -> Optional[int]:
+    text = (text or "").strip()
+    if not text or not is_meaningful_text(text):
+        raise ValueError("Refusing to post: tweet text is empty or non-meaningful.")
+
     if DRY_RUN:
         log.info(f"[DRY_RUN] Would tweet ({len(text)} chars): {text}")
         return None
+
     client = twitter_client()
     try:
         resp = client.create_tweet(text=text)  # v2 POST /2/tweets
     except tweepy.errors.Forbidden as e:
         log.error(
-            "403 from X API. Check: App has OAuth 1.0a enabled, App permissions set to "
-            "Read & Write, and Access Token/Secret REGENERATED after the change. "
-            "Then update GitHub secrets TWITTER_ACCESS_TOKEN / TWITTER_ACCESS_TOKEN_SECRET."
+            "403 from X API. Check OAuth 1.0a is enabled, App permissions are Read & Write, "
+            "and Access Token/Secret were regenerated and updated in GitHub Secrets."
         )
         raise
+    except tweepy.errors.BadRequest as e:
+        log.error(f"400 from X API: {e} | Text length={len(text)} | Preview='{text[:80]}'")
+        raise
+
     tweet_id = getattr(resp, "data", {}).get("id")
     log.info(f"Tweet posted: https://twitter.com/i/web/status/{tweet_id}")
     return tweet_id
