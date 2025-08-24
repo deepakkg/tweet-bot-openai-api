@@ -43,17 +43,21 @@ jobs:
 
       - name: Run bot (single post)
         env:
+          # Secrets
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           TWITTER_API_KEY: ${{ secrets.TWITTER_API_KEY }}
           TWITTER_API_SECRET: ${{ secrets.TWITTER_API_SECRET }}
           TWITTER_ACCESS_TOKEN: ${{ secrets.TWITTER_ACCESS_TOKEN }}
           TWITTER_ACCESS_TOKEN_SECRET: ${{ secrets.TWITTER_ACCESS_TOKEN_SECRET }}
-
-          # Safe defaults as repository Variables (not secrets)
-          DRY_RUN: ${{ vars.DRY_RUN || 'true' }}     # start in dry mode
-          OPENAI_MODEL: ${{ vars.OPENAI_MODEL || 'gpt-4o-mini' }}
-          MAX_RETRIES: ${{ vars.MAX_RETRIES || '6' }}
-          TWEET_TOPICS: ${{ vars.TWEET_TOPICS || '' }}
-          OPENAI_USE_MODERATION: "true"
-          RUN_ONCE: "true"    # run just once per workflow run
+    
+          # Vars (repo/org level) — map them explicitly
+          OPENAI_MODEL: ${{ vars.OPENAI_MODEL }}            # e.g. gpt-5-nano
+          FALLBACK_MODEL: ${{ vars.FALLBACK_MODEL }}        # e.g. gpt-4o-mini
+          OPENAI_MAX_COMPLETION_TOKENS: ${{ vars.OPENAI_MAX_COMPLETION_TOKENS || 120 }}
+          TWEET_TOPICS: ${{ vars.TWEET_TOPICS }}
+          TWEET_TIMES_IST: ${{ vars.TWEET_TIMES_IST || '09:15,17:15' }}
+          LOGLEVEL: ${{ vars.LOGLEVEL || 'INFO' }}
+          OPENAI_USE_MODERATION: ${{ vars.OPENAI_USE_MODERATION || 'true' }}
+          DRY_RUN: ${{ vars.DRY_RUN || 'false' }}
+          RUN_ONCE: "true"  # if you’re triggering on a schedule and want one-shot execution
         run: python twitter_bot.py
