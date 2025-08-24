@@ -106,7 +106,7 @@ def openai_client():
 # Minimal-but-solid filters; tune/extend as needed.
 PROFANITY_PATTERNS = [
     r"\b(?i)(shit|fuck|bitch|bastard|asshole|dick|cunt|slut|whore|motherf\w+|bullshit)\b",
-    r"(?i)\b(nigga|nigger|chink|spic|kike|retard|faggot)\b",  # hateful slurs (reject outright)
+    r"(?i)\b(nigga|nigger|chink|spic|kike|pussy|retard|faggot)\b",  # hateful slurs (reject outright)
 ]
 
 # PII regexes (international-ish + India specifics)
@@ -139,34 +139,52 @@ def length_ok(text: str) -> bool:
 
 # ------------- OpenAI moderation (optional) -------------
 def openai_moderation_flagged(client, text: str) -> bool:
+    """
+    Returns True if OpenAI moderation flags the text, False otherwise.
+    Works with both new SDK (>=1.x) and legacy (<1.x).
+    """
     try:
         if _OPENAI_SDK == "v1":
-            resp = client.moderations.create(model="omni-moderation-latest", input=text)
-            # New SDK shape: resp.results[0].flagged
-            flagged = any(getattr(res, "flagged", False) for res in resp.results)
-            return bool(flagged)
+            # New SDK: client.moderations.create(...)
+            resp = client.moderations.create(
+                model="omni-moderation-latest",
+                input=text
+            )
+            # resp.results is a list of objects; each has .flagged (bool)
+            results = getattr(resp, "results", []) or []
+            return any(bool(getattr(r, "flagged", False)) for r in results)
+
         else:
-            resp = client.Moderation.create(model="omni-moderation-latest", input=text)
-            return bool(resp["results"][0]["flagged"])
+            # Legacy SDK: openai.Moderation.create(...)
+            resp = client.Moderation.create(
+                model="omni-moderation-latest",
+                input=text
+            )
+            # resp is a dict; resp["results"][0]["flagged"] is a bool
+            results = resp.get("results", []) if isinstance(resp, dict) else []
+            return any(bool(r.get("flagged", False)) for r in results)
+
     except Exception as e:
+        # Fail-open to avoid blocking posts due to transient API issues
         log.warning(f"Moderation check failed (continuing without): {e}")
         return False
 
 # ------------- Tweet generation -------------
 SYSTEM_PROMPT = (
     "You write high-signal, clean, **tweet-length** insights (<=240 chars) "
-    "for a broad professional audience. Avoid emojis, hashtags, links, and numbers that look like IDs. "
+    "for a broad professional audience. Avoid emojis, hashtags, links, m dashes, n dashes and numbers that look like IDs. "
     "No personal info, no commands to the reader, and no profanity. Keep it crisp."
 )
 
 USER_PROMPT_TEMPLATE = (
     "Write one original tweet-length insight (<=240 chars) on the topic: '{topic}'. "
-    "Offer a specific idea, not a list. Avoid jargon; keep it useful and quotable. "
+    "Offer a specific idea, not a list. Avoid jargon; keep it useful, upbeat and quotable. "
     "Do not include links, @mentions, hashtags, or quotes."
 )
 
 def fetch_tweet_from_openai(client, topic: str) -> str:
     if _OPENAI_SDK == "v1":
+        # New OpenAI SDK (>=1.x) requires max_completion_tokens
         resp = client.chat.completions.create(
             model=OPENAI_MODEL,
             messages=[
@@ -174,10 +192,11 @@ def fetch_tweet_from_openai(client, topic: str) -> str:
                 {"role": "user", "content": USER_PROMPT_TEMPLATE.format(topic=topic)},
             ],
             temperature=0.7,
-            max_tokens=120
+            max_completion_tokens=120   # <-- patched here
         )
         return resp.choices[0].message.content.strip()
     else:
+        # Legacy SDK (<1.x) still uses max_tokens
         resp = client.ChatCompletion.create(
             model=OPENAI_MODEL,
             messages=[
@@ -185,7 +204,7 @@ def fetch_tweet_from_openai(client, topic: str) -> str:
                 {"role": "user", "content": USER_PROMPT_TEMPLATE.format(topic=topic)},
             ],
             temperature=0.7,
-            max_tokens=120
+            max_tokens=120              # <-- keep this for legacy
         )
         return resp["choices"][0]["message"]["content"].strip()
 
