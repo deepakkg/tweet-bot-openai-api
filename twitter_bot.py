@@ -263,22 +263,24 @@ def openai_moderation_flagged(client, text: str) -> bool:
 
 # ------------- Tweet generation -------------
 SYSTEM_PROMPT = (
-    """You are a tweet generator. Produce a single original tweet <=240 characters.
-        Hard rules:
-        - Output plain text only. No markdown, code fences, quotes, or prefixes.
-        - No emojis, hashtags, @mentions, or links/URLs.
-        - No numbers that look like IDs; no personal data.
-        - Keep it specific, useful, and self-contained.
-        - If your draft exceeds 240 characters, shorten it and output only the final <=240 char version.
-        Return ONLY the tweet text and nothing else."""
+    """You are a conversational writer for Twitter. 
+        Produce ONE original tweet (<=240 characters). 
+        Write like a thoughtful human sharing a quick idea: 
+        - plain text only (no markdown, quotes, or code fences) 
+        - no hashtags, no links, no @mentions, no emojis 
+        - avoid generic platitudes; be concrete, specific, and natural 
+        - contractions are fine (don’t, it’s, you’ll) 
+        - aim for a tone that’s informal but thoughtful, like advice you’d give a friend
+        Return ONLY the tweet text."""
 )
 
 USER_PROMPT_TEMPLATE = (
-    """Write one tweet (<=240 chars) about: "{topic}".
-        Focus on one concrete idea or tactic. Avoid lists, clichés, and generic advice.
-        You must output ONLY the final tweet text, nothing else. No quotes or formatting.
-        Constraints: <=240 characters, no emojis/hashtags/links/@mentions/PII."""
-)
+    """Write one casual, human-sounding tweet (<=240 chars) about: "{topic}". 
+        Make it feel personal and conversational. 
+        Focus on one clear idea or tip. 
+        No hashtags, no links, no emojis, no lists. 
+        Return only the tweet text."""
+        )
 
 def _supports_sampling_params(model: str) -> bool:
     """
