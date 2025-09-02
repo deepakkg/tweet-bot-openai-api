@@ -198,7 +198,7 @@ def _extract_text_from_chat_completion(resp) -> str:
 def _build_plain_prompt(topic: str) -> str:
     # Single-string prompt works best with gpt-5-nano via Responses API.
     return (
-        """Write 1 original tweet under 280 characters. 
+        f"""Write 1 original tweet under 280 characters. 
             Topic: "{topic}". 
             The tweet should feel casual, human, and authentic—not like a polished article. 
             It’s okay to be funny, punchy, or slightly irreverent as long as it feels natural. 
@@ -261,7 +261,7 @@ def openai_moderation_flagged(client, text: str) -> bool:
 
 # ------------- Tweet generation -------------
 SYSTEM_PROMPT = (
-    """You are a Twitter user who writes short, casual, and very human-sounding tweets. 
+    f"""You are a Twitter user who writes short, casual, and very human-sounding tweets. 
         Your style is conversational, witty, and approachable—not corporate, not essay-like, not motivational-speaker style. 
         Mix in humor, irony, or light sarcasm when natural. 
         Keep language loose and natural, like how real people tweet (contractions, short sentences, occasional slang).
@@ -273,7 +273,7 @@ SYSTEM_PROMPT = (
 )
 
 USER_PROMPT_TEMPLATE = (
-            """Write 1 original tweet under 280 characters. 
+            f"""Write 1 original tweet under 280 characters. 
             Topic: "{topic}". 
             The tweet should feel casual, human, and authentic—not like a polished article. 
             It’s okay to be funny, punchy, or slightly irreverent as long as it feels natural. 
