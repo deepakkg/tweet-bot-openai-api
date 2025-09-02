@@ -117,21 +117,28 @@ def is_meaningful_text(text: str) -> bool:
     except Exception:
         return bool(re.search(r"[A-Za-z0-9]", text or ""))
 
-# ------------- Prompt (tightened) -------------
-SYSTEM_PROMPT = (
-    "Write like a real Twitter user: casual, short, human, sometimes witty. "
-    "Avoid corporate or essay tone. No hashtags or emojis unless asked. "
-    "Vary style: some tweets funny, some thoughtful."
-)
+# ------------- User Prompt Only -------------
+USER_PROMPT_TEMPLATE = """Write 1 original tweet under 280 characters.
+
+Topic: "{topic}"
+
+Guidelines:
+- Make it feel human, casual, and authentic.
+- Short, conversational tone (not essay-like or corporate).
+- Humor, wit, or light sarcasm is welcome if natural.
+- Avoid clichés like "resilience is bouncing back" or "learning is a journey."
+- Do not use hashtags, emojis, or bullet points.
+Return ONLY the tweet text.
+"""
 
 def build_user_prompt(topic: str) -> str:
     safe_topic = topic.replace('"', "'")
-    return f"Topic: {safe_topic}\nWrite one tweet under 280 characters:"
+    return USER_PROMPT_TEMPLATE.format(topic=safe_topic)
 
 # ------------- OpenAI fetch -------------
 def fetch_tweet_from_openai(client, topic: str) -> str:
     max_tok = int(os.getenv("OPENAI_MAX_COMPLETION_TOKENS", "120"))
-    full_prompt = f"{SYSTEM_PROMPT}\n\n{build_user_prompt(topic)}"
+    prompt = build_user_prompt(topic)
 
     models = [os.getenv("OPENAI_MODEL", "gpt-5-nano").strip()]
     fb = os.getenv("FALLBACK_MODEL", "").strip()
@@ -143,7 +150,7 @@ def fetch_tweet_from_openai(client, topic: str) -> str:
         try:
             resp = client.responses.create(
                 model=m,
-                input=full_prompt,
+                input=prompt,   # ✅ Only user prompt now
                 max_output_tokens=max_tok,
             )
             raw = resp.output_text
