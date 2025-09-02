@@ -117,27 +117,16 @@ def is_meaningful_text(text: str) -> bool:
     except Exception:
         return bool(re.search(r"[A-Za-z0-9]", text or ""))
 
-# ------------- Prompts -------------
-SYSTEM_PROMPT = """You are a Twitter user who writes short, casual, and very human-sounding tweets. 
-Your style is conversational, witty, and approachable—not corporate, not essay-like, not motivational-speaker style. 
-Mix in humor, irony, or light sarcasm when natural. 
-Keep language loose and natural, like how real people tweet (contractions, short sentences, occasional slang).
-Avoid sounding like an AI or a brand. 
-Variety matters: some tweets can be observational, some thoughtful, some funny, some snappy one-liners. 
-Never use hashtags, emojis, or bullet points unless explicitly asked.
-Each tweet should feel like something you’d actually want to stop and read in a timeline."""
-
-_USER_PROMPT_TEMPLATE = """Write 1 original tweet under 280 characters. 
-Topic: "{topic}". 
-The tweet should feel casual, human, and authentic—not like a polished article. 
-It’s okay to be funny, punchy, or slightly irreverent as long as it feels natural. 
-Do not repeat clichés like “resilience is bouncing back” or “learning is a journey.” 
-Avoid generic advice, uptight phrasing, and motivational poster language.
-Return ONLY the tweet text and nothing else."""
+# ------------- Prompt (tightened) -------------
+SYSTEM_PROMPT = (
+    "Write like a real Twitter user: casual, short, human, sometimes witty. "
+    "Avoid corporate or essay tone. No hashtags or emojis unless asked. "
+    "Vary style: some tweets funny, some thoughtful."
+)
 
 def build_user_prompt(topic: str) -> str:
     safe_topic = topic.replace('"', "'")
-    return _USER_PROMPT_TEMPLATE.format(topic=safe_topic)
+    return f"Topic: {safe_topic}\nWrite one tweet under 280 characters:"
 
 # ------------- OpenAI fetch -------------
 def fetch_tweet_from_openai(client, topic: str) -> str:
@@ -159,11 +148,13 @@ def fetch_tweet_from_openai(client, topic: str) -> str:
             )
             raw = resp.output_text
             log_raw_reply(raw, topic)
-            return (raw or "").strip()
+            if raw and raw.strip():
+                return raw.strip()
         except Exception as e:
             log.warning(f"Model {m} failed: {e}")
             last_error = e
             time.sleep(2)
+
     raise RuntimeError(f"All models failed: {last_error}")
 
 # ---------------- Scheduler / Main logic would continue unchanged ----------------
