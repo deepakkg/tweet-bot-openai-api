@@ -201,7 +201,7 @@ def _build_plain_prompt(topic: str) -> str:
         f"""Write 1 original tweet under 280 characters. 
             Topic: "{topic}". 
             The tweet should feel casual, human, and authentic—not like a polished article. 
-            It’s okay to be funny, punchy, or slightly sarcastic as long as it feels natural. 
+            It’s okay to be funny, witty, or slightly sarcastic as long as it feels natural. 
             Do not repeat clichés like “resilience is bouncing back” or “learning is a journey.” 
             Avoid generic advice, uptight phrasing, and motivational poster language.
             Return ONLY the tweet text and nothing else."""
@@ -272,7 +272,7 @@ Each tweet should feel like something you’d actually want to stop and read in 
 _USER_PROMPT_TEMPLATE = """Write 1 original tweet under 280 characters. 
 Topic: "{topic}". 
 The tweet should feel casual, human, and authentic—not like a polished article. 
-It’s okay to be funny, punchy, or slightly sarcastic as long as it feels natural. 
+It’s okay to be funny, witty, or slightly sarcastic as long as it feels natural. 
 Do not repeat clichés like “resilience is bouncing back” or “learning is a journey.” 
 Avoid generic advice, uptight phrasing, and motivational poster language.
 Return ONLY the tweet text and nothing else."""
