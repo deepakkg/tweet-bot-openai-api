@@ -5,26 +5,11 @@ twitter_bot.py
 Features:
 - Posts twice daily (default 09:15 and 17:15 Asia/Kolkata) using APScheduler
 - Fetches tweet text from OpenAI Responses API (gpt-4o-mini only)
-- Enforces: length < 280, no profanity, no PII, optional OpenAI moderation
+- Enforces: length < 280, no profanity, no PII
+- Optional OpenAI moderation (fail-open if moderation API fails)
 - Retries fetching a fresh tweet if validation fails (exponential backoff)
 - DRY_RUN mode to print instead of post
 - Robust logging
-
-Env Vars required:
-  OPENAI_API_KEY=...
-  TWITTER_API_KEY=...
-  TWITTER_API_SECRET=...
-  TWITTER_ACCESS_TOKEN=...
-  TWITTER_ACCESS_TOKEN_SECRET=...
-
-Optional:
-  DRY_RUN=true
-  RUN_ONCE=true   # For local testing, runs once and exits
-  TWEET_TOPICS="..."   # Comma-separated
-  TWEET_TIMES_IST="09:15,17:15"
-  OPENAI_MAX_COMPLETION_TOKENS=120
-  MAX_RETRIES=6
-  OPENAI_USE_MODERATION=true
 """
 
 import os
@@ -142,10 +127,10 @@ Topic: "{topic}"
 
 Guidelines:
 - Make it feel human, casual, and authentic.
-- Short, conversational tone (not essay-like or LinkedIn post or corporate).
+- Short, conversational tone (not essay-like or corporate).
 - Humor, wit, or light sarcasm is welcome if natural.
 - Avoid clichés like "resilience is bouncing back" or "learning is a journey."
-- Do not use em dashes, en dashes, hashtags, or bullet points.
+- Do not use hashtags, emojis, or bullet points.
 Return ONLY the tweet text.
 """
 
@@ -184,10 +169,10 @@ def passes_moderation(client, text: str) -> bool:
         return True
     try:
         resp = client.moderations.create(model="omni-moderation-latest", input=text)
-        return not any(r["flagged"] for r in resp["results"])
+        return not any(r.flagged for r in resp.results)
     except Exception as e:
-        log.warning(f"Moderation API failed (continuing without): {e}")
-        return False
+        log.warning(f"Moderation API failed (fail-open): {e}")
+        return True  # ✅ Fail-open
 
 # ------------- Tweet Posting -------------
 def generate_and_post():
