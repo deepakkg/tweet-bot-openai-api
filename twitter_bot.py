@@ -4,32 +4,11 @@ twitter_bot.py
 
 Features:
 - Posts twice daily (default 09:15 and 17:15 Asia/Kolkata) using APScheduler
-- Fetches tweet text from OpenAI Chat Completions
+- Fetches tweet text from OpenAI Responses API
 - Enforces: length < 280, no profanity, no PII (emails, phones, Aadhaar, PAN, SSN-like), optional OpenAI moderation
 - Retries fetching a fresh tweet if validation fails (exponential backoff)
 - DRY_RUN mode to print instead of post
 - Robust logging
-
-Env Vars required:
-  OPENAI_API_KEY=...
-  TWITTER_API_KEY=...
-  TWITTER_API_SECRET=...
-  TWITTER_ACCESS_TOKEN=...
-  TWITTER_ACCESS_TOKEN_SECRET=...
-
-Optional:
-  DRY_RUN=true
-  TWEET_TOPICS="productivity,leadership,learning,writing"
-  TWEET_TIMES_IST="09:15,17:15"
-  OPENAI_MODEL="gpt-4o-mini"
-  MAX_RETRIES="6"
-  OPENAI_USE_MODERATION="true"
-
-Install:
-  pip install tweepy openai apscheduler pytz regex
-
-Run:
-  python twitter_bot.py
 """
 
 import os
@@ -38,20 +17,20 @@ import logging
 import random
 import re
 from datetime import datetime
-from typing import Optional, Tuple, List
+from typing import Optional
 
 import pytz
-import regex  # better unicode word boundaries than re for profanity
+import regex
 import tweepy
 from apscheduler.schedulers.blocking import BlockingScheduler
 from apscheduler.triggers.cron import CronTrigger
 
-# --- OpenAI (new-style SDK import is "from openai import OpenAI") ---
+# --- OpenAI ---
 try:
     from openai import OpenAI
     _OPENAI_SDK = "v1"
 except Exception:
-    import openai as OpenAI  # fallback if older package is installed
+    import openai as OpenAI
     _OPENAI_SDK = "legacy"
 
 # ------------- Logging -------------
@@ -62,9 +41,7 @@ logging.basicConfig(
 )
 log = logging.getLogger("twitter-bot")
 
-# Optional: show raw LLM replies when DEBUG
 def log_raw_reply(raw: str, topic: str):
-    """Logs the raw OpenAI model reply before cleanup."""
     preview = (raw or "").replace("\n", "\\n")
     if len(preview) > 200:
         preview = preview[:200] + "..."
@@ -87,18 +64,12 @@ TIMES = [t.strip() for t in TWEET_TIMES_IST.split(",") if t.strip()]
 
 # ------------- Twitter Client -------------
 def twitter_client() -> tweepy.Client:
-    api_key = os.environ["TWITTER_API_KEY"]
-    api_secret = os.environ["TWITTER_API_SECRET"]
-    access_token = os.environ["TWITTER_ACCESS_TOKEN"]
-    access_secret = os.environ["TWITTER_ACCESS_TOKEN_SECRET"]
-
-    client = tweepy.Client(
-        consumer_key=api_key,
-        consumer_secret=api_secret,
-        access_token=access_token,
-        access_token_secret=access_secret
+    return tweepy.Client(
+        consumer_key=os.environ["TWITTER_API_KEY"],
+        consumer_secret=os.environ["TWITTER_API_SECRET"],
+        access_token=os.environ["TWITTER_ACCESS_TOKEN"],
+        access_token_secret=os.environ["TWITTER_ACCESS_TOKEN_SECRET"]
     )
-    return client
 
 # ------------- OpenAI Client -------------
 def openai_client():
@@ -109,7 +80,7 @@ def openai_client():
         OpenAI.api_key = key
         return OpenAI
 
-# ------------- Validation: profanity + PII -------------
+# ------------- Validation -------------
 PROFANITY_PATTERNS = [
     r"\b(?i)(shit|fuck|bitch|bastard|asshole|dick|cunt|slut|whore|motherf\w+|bullshit)\b",
     r"(?i)\b(nigga|nigger|chink|spic|kike|pussy|retard|faggot)\b",
@@ -146,22 +117,6 @@ def is_meaningful_text(text: str) -> bool:
     except Exception:
         return bool(re.search(r"[A-Za-z0-9]", text or ""))
 
-def _extract_text_from_chat_completion(resp) -> str:
-    try:
-        choice = resp.choices[0]
-        msg = getattr(choice, "message", None) or choice.get("message")
-        content = getattr(msg, "content", None)
-        if content is None and isinstance(msg, dict):
-            content = msg.get("content")
-        if isinstance(content, list):
-            texts = [c["text"] for c in content if c.get("type") == "text"]
-            return "\n".join(texts).strip()
-        elif isinstance(content, str):
-            return content.strip()
-    except Exception as e:
-        log.error(f"Failed to extract text: {e}")
-    return ""
-
 # ------------- Prompts -------------
 SYSTEM_PROMPT = """You are a Twitter user who writes short, casual, and very human-sounding tweets. 
 Your style is conversational, witty, and approachable—not corporate, not essay-like, not motivational-speaker style. 
@@ -169,13 +124,13 @@ Mix in humor, irony, or light sarcasm when natural.
 Keep language loose and natural, like how real people tweet (contractions, short sentences, occasional slang).
 Avoid sounding like an AI or a brand. 
 Variety matters: some tweets can be observational, some thoughtful, some funny, some snappy one-liners. 
-Never use hashtags, em dashes, en dashes, or bullet points unless explicitly asked.
+Never use hashtags, emojis, or bullet points unless explicitly asked.
 Each tweet should feel like something you’d actually want to stop and read in a timeline."""
 
 _USER_PROMPT_TEMPLATE = """Write 1 original tweet under 280 characters. 
 Topic: "{topic}". 
 The tweet should feel casual, human, and authentic—not like a polished article. 
-It’s okay to be funny, punchy, sarcastic or slightly irreverent as long as it feels natural. 
+It’s okay to be funny, punchy, or slightly irreverent as long as it feels natural. 
 Do not repeat clichés like “resilience is bouncing back” or “learning is a journey.” 
 Avoid generic advice, uptight phrasing, and motivational poster language.
 Return ONLY the tweet text and nothing else."""
@@ -187,7 +142,7 @@ def build_user_prompt(topic: str) -> str:
 # ------------- OpenAI fetch -------------
 def fetch_tweet_from_openai(client, topic: str) -> str:
     max_tok = int(os.getenv("OPENAI_MAX_COMPLETION_TOKENS", "120"))
-    prompt = build_user_prompt(topic)
+    full_prompt = f"{SYSTEM_PROMPT}\n\n{build_user_prompt(topic)}"
 
     models = [os.getenv("OPENAI_MODEL", "gpt-5-nano").strip()]
     fb = os.getenv("FALLBACK_MODEL", "").strip()
@@ -199,20 +154,16 @@ def fetch_tweet_from_openai(client, topic: str) -> str:
         try:
             resp = client.responses.create(
                 model=m,
-                input=[
-                    {"role": "system", "content": SYSTEM_PROMPT},
-                    {"role": "user", "content": prompt},
-                ],
+                input=full_prompt,
                 max_output_tokens=max_tok,
             )
             raw = resp.output_text
             log_raw_reply(raw, topic)
-            return raw.strip()
+            return (raw or "").strip()
         except Exception as e:
             log.warning(f"Model {m} failed: {e}")
             last_error = e
             time.sleep(2)
     raise RuntimeError(f"All models failed: {last_error}")
 
-# ------------- Main Logic (rest of file continues as before) -------------
-# ... your validation, retries, APScheduler, posting loop, etc. remain unchanged ...
+# ---------------- Scheduler / Main logic would continue unchanged ----------------
