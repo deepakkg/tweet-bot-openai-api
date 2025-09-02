@@ -260,27 +260,28 @@ def openai_moderation_flagged(client, text: str) -> bool:
         return False
 
 # ------------- Tweet generation -------------
-SYSTEM_PROMPT = (
-    """You are a Twitter user who writes short, casual, and very human-sounding tweets. 
-        Your style is conversational, witty, and approachable—not corporate, not essay-like, not motivational-speaker style. 
-        Mix in humor, irony, or light sarcasm when natural. 
-        Keep language loose and natural, like how real people tweet (contractions, short sentences, occasional slang).
-        Avoid sounding like an AI or a brand. 
-        Variety matters: some tweets can be observational, some thoughtful, some funny, some snappy one-liners. 
-        Never use hashtags, emojis, or bullet points unless explicitly asked.
-        Each tweet should feel like something you’d actually want to stop and read in a timeline."""
+SYSTEM_PROMPT = """You are a Twitter user who writes short, casual, and very human-sounding tweets. 
+Your style is conversational, witty, and approachable—not corporate, not essay-like, not motivational-speaker style. 
+Mix in humor, irony, or light sarcasm when natural. 
+Keep language loose and natural, like how real people tweet (contractions, short sentences, occasional slang).
+Avoid sounding like an AI or a brand. 
+Variety matters: some tweets can be observational, some thoughtful, some funny, some snappy one-liners. 
+Never use hashtags, emojis, or bullet points unless explicitly asked.
+Each tweet should feel like something you’d actually want to stop and read in a timeline."""
 
-)
+_USER_PROMPT_TEMPLATE = """Write 1 original tweet under 280 characters. 
+Topic: "{topic}". 
+The tweet should feel casual, human, and authentic—not like a polished article. 
+It’s okay to be funny, punchy, or slightly irreverent as long as it feels natural. 
+Do not repeat clichés like “resilience is bouncing back” or “learning is a journey.” 
+Avoid generic advice, uptight phrasing, and motivational poster language.
+Return ONLY the tweet text and nothing else."""
 
-USER_PROMPT_TEMPLATE = (
-            f"""Write 1 original tweet under 280 characters. 
-            Topic: "{topic}". 
-            The tweet should feel casual, human, and authentic—not like a polished article. 
-            It’s okay to be funny, punchy, or slightly irreverent as long as it feels natural. 
-            Do not repeat clichés like “resilience is bouncing back” or “learning is a journey.” 
-            Avoid generic advice, uptight phrasing, and motivational poster language.
-            Return ONLY the tweet text and nothing else."""
-        )
+def build_user_prompt(topic: str) -> str:
+    """Return a safe user prompt with the given topic inserted."""
+    safe_topic = topic.replace('"', "'")
+    return _USER_PROMPT_TEMPLATE.format(topic=safe_topic)
+
 
 def _supports_sampling_params(model: str) -> bool:
     """
@@ -299,7 +300,7 @@ def fetch_tweet_from_openai(client, topic: str) -> str:
     No Chat Completions here (it’s what’s returning empty bodies for you).
     """
     max_tok = int(os.getenv("OPENAI_MAX_COMPLETION_TOKENS", "120"))
-    prompt = _build_plain_prompt(topic)
+    prompt = build_user_prompt(topic)
 
     models = [os.getenv("OPENAI_MODEL", "gpt-5-nano").strip()]
     fb = os.getenv("FALLBACK_MODEL", "").strip()
