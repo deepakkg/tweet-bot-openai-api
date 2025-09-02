@@ -198,15 +198,13 @@ def _extract_text_from_chat_completion(resp) -> str:
 def _build_plain_prompt(topic: str) -> str:
     # Single-string prompt works best with gpt-5-nano via Responses API.
     return (
-        "You are a tweet generator. Produce ONE original tweet <=240 characters.\n"
-        "Rules:\n"
-        "- Output plain text only. No markdown, code fences, quotes, or prefixes.\n"
-        "- No emojis, hashtags, @mentions, or links/URLs.\n"
-        "- No numbers that look like IDs; no personal data.\n"
-        "- Keep it specific, useful, and self-contained.\n"
-        "- If your draft exceeds 240 characters, shorten it and output only the final <=240 char version.\n\n"
-        f'Topic: "{topic}"\n'
-        "Return ONLY the tweet text and nothing else."
+        """Write 1 original tweet under 280 characters. 
+            Topic: "{topic}". 
+            The tweet should feel casual, human, and authentic—not like a polished article. 
+            It’s okay to be funny, punchy, or slightly irreverent as long as it feels natural. 
+            Do not repeat clichés like “resilience is bouncing back” or “learning is a journey.” 
+            Avoid generic advice, uptight phrasing, and motivational poster language.
+            Return ONLY the tweet text and nothing else."""
     )
 
 
@@ -263,23 +261,25 @@ def openai_moderation_flagged(client, text: str) -> bool:
 
 # ------------- Tweet generation -------------
 SYSTEM_PROMPT = (
-    """You are a conversational writer for Twitter. 
-        Produce ONE original tweet (<=240 characters). 
-        Write like a thoughtful human sharing a quick idea: 
-        - plain text only (no markdown, quotes, or code fences) 
-        - no hashtags, no links, no @mentions, no emojis 
-        - avoid generic platitudes; be concrete, specific, and natural 
-        - contractions are fine (don’t, it’s, you’ll) 
-        - aim for a tone that’s informal but thoughtful, like advice you’d give a friend
-        Return ONLY the tweet text."""
+    """You are a Twitter user who writes short, casual, and very human-sounding tweets. 
+        Your style is conversational, witty, and approachable—not corporate, not essay-like, not motivational-speaker style. 
+        Mix in humor, irony, or light sarcasm when natural. 
+        Keep language loose and natural, like how real people tweet (contractions, short sentences, occasional slang).
+        Avoid sounding like an AI or a brand. 
+        Variety matters: some tweets can be observational, some thoughtful, some funny, some snappy one-liners. 
+        Never use hashtags, emojis, or bullet points unless explicitly asked.
+        Each tweet should feel like something you’d actually want to stop and read in a timeline."""
+
 )
 
 USER_PROMPT_TEMPLATE = (
-    """Write one casual, human-sounding tweet (<=240 chars) about: "{topic}". 
-        Make it feel personal and conversational. 
-        Focus on one clear idea or tip. 
-        No hashtags, no links, no emojis, no lists. 
-        Return only the tweet text."""
+            """Write 1 original tweet under 280 characters. 
+            Topic: "{topic}". 
+            The tweet should feel casual, human, and authentic—not like a polished article. 
+            It’s okay to be funny, punchy, or slightly irreverent as long as it feels natural. 
+            Do not repeat clichés like “resilience is bouncing back” or “learning is a journey.” 
+            Avoid generic advice, uptight phrasing, and motivational poster language.
+            Return ONLY the tweet text and nothing else."""
         )
 
 def _supports_sampling_params(model: str) -> bool:
