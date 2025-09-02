@@ -204,7 +204,7 @@ def _build_plain_prompt(topic: str) -> str:
             It’s okay to be funny, witty, or slightly sarcastic as long as it feels natural. 
             Do not repeat clichés like “resilience is bouncing back” or “learning is a journey.” 
             Avoid generic advice, uptight phrasing, and motivational poster language.
-            Never use em dashes, en dashes, hyphen, hashtags, emojis, or bullet points unless explicitly asked.
+            Never use em dashes, en dashes, hyphen, hashtags, or bullet points unless explicitly asked.
             Return ONLY the tweet text and nothing else."""
     )
 
@@ -267,7 +267,7 @@ Mix in humor, irony, or light sarcasm when natural.
 Keep language loose and natural, like how real people tweet (contractions, short sentences, occasional slang).
 Avoid sounding like an AI or a brand. 
 Variety matters: some tweets can be observational, some thoughtful, some funny, some snappy one-liners. 
-Never use em dashes, en dashes, hyphen, hashtags, emojis, or bullet points unless explicitly asked.
+Never use em dashes, en dashes, hyphen, hashtags, or bullet points unless explicitly asked.
 Each tweet should feel like something you’d actually want to stop and read in a timeline."""
 
 _USER_PROMPT_TEMPLATE = """Write 1 original tweet under 280 characters. 
@@ -276,7 +276,7 @@ The tweet should feel casual, human, and authentic—not like a polished article
 It’s okay to be funny, witty, or slightly sarcastic as long as it feels natural. 
 Do not repeat clichés like “resilience is bouncing back” or “learning is a journey.” 
 Avoid generic advice, uptight phrasing, and motivational poster language.
-Never use em dashes, en dashes, hyphen, hashtags, emojis, or bullet points unless explicitly asked.
+Never use em dashes, en dashes, hyphen, hashtags, or bullet points unless explicitly asked.
 Return ONLY the tweet text and nothing else."""
 
 def build_user_prompt(topic: str) -> str:
