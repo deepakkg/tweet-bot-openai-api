@@ -142,10 +142,10 @@ Topic: "{topic}"
 
 Guidelines:
 - Make it feel human, casual, and authentic.
-- Short, conversational tone (not essay-like or corporate).
+- Short, conversational tone (not essay-like or LinkedIn post or corporate).
 - Humor, wit, or light sarcasm is welcome if natural.
 - Avoid clichés like "resilience is bouncing back" or "learning is a journey."
-- Do not use hashtags, emojis, or bullet points.
+- Do not use em dashes, en dashes, hashtags, or bullet points.
 Return ONLY the tweet text.
 """
 
