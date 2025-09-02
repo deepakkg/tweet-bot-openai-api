@@ -261,7 +261,7 @@ def openai_moderation_flagged(client, text: str) -> bool:
 
 # ------------- Tweet generation -------------
 SYSTEM_PROMPT = (
-    f"""You are a Twitter user who writes short, casual, and very human-sounding tweets. 
+    """You are a Twitter user who writes short, casual, and very human-sounding tweets. 
         Your style is conversational, witty, and approachable—not corporate, not essay-like, not motivational-speaker style. 
         Mix in humor, irony, or light sarcasm when natural. 
         Keep language loose and natural, like how real people tweet (contractions, short sentences, occasional slang).
