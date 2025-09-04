@@ -121,18 +121,23 @@ def is_meaningful_text(text: str) -> bool:
         return bool(re.search(r"[A-Za-z0-9]", text or ""))
 
 # ------------- User Prompt -------------
-USER_PROMPT_TEMPLATE = """Write 1 original tweet under 280 characters.
-
+USER_PROMPT_TEMPLATE = """GOAL: Generate a single original tweet that feels authentic, casual, and engaging while staying under Twitter’s 280-character limit.
 Topic: "{topic}"
-
-Guidelines:
-- Make it feel human, casual, and authentic.
-- Short, conversational tone (not essay-like or corporate).
-- Humor, wit, or light sarcasm is welcome if natural.
-- Avoid clichés like "resilience is bouncing back" or "learning is a journey."
-- Do not use em dashes, en dashes, hashtags, or bullet points.
-Return ONLY the tweet text.
-"""
+SUCCESS CRITERIA:  
+- Output must be exactly one tweet, no preamble or extra text.  
+- Tone: conversational, human, and natural—not corporate, essay-like, or overly polished.  
+- Humor, wit, or light sarcasm may be included if it flows naturally.  
+- Absolutely avoid clichés (e.g., “resilience is bouncing back,” “learning is a journey”).  
+- Must feel like something a real person would post, not marketing copy.  
+- Ideal tweets should sound spontaneous, relatable, and easy to read in one go.  
+CONSTRAINTS:  
+- Strictly under 280 characters.  
+- No em dashes, en dashes, hashtags, or bullet points.  
+- No multi-tweet threads or follow-up explanations.
+- Do not start the tweet with "just"  
+- Do not return multiple options—only one tweet.  
+OUTPUT FORMAT:  
+Plain text containing only the tweet. No quotes, labels, or additional commentary."""
 
 def build_user_prompt(topic: str) -> str:
     safe_topic = topic.replace('"', "'")
