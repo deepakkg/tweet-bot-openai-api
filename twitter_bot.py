@@ -128,11 +128,12 @@ SUCCESS CRITERIA:
 - Tone: conversational, human, and natural—not corporate, essay-like, or overly polished.  
 - Humor, wit, light sarcasm or emojis may be included if it flows naturally.  
 - Absolutely avoid clichés (e.g., “resilience is bouncing back,” “learning is a journey”).  
-- Must feel like something a real person would post, not marketing copy.  
+- Must feel like something a real person would post, not marketing copy or promotional language.  
 - Ideal tweets should sound spontaneous, relatable, and easy to read in one go.  
 CONSTRAINTS:  
 - Strictly under 280 characters.  
-- No em dashes, en dashes, hyphens, hashtags, or bullet points.  
+- Strictly no em dashes, en dashes, hyphens.
+- No negative parallelisms, hashtags, or bullet points.  
 - No multi-tweet threads or follow-up explanations.
 - Do not start the tweet with "just"  
 - Do not return multiple options—only one tweet.  
