@@ -125,8 +125,8 @@ USER_PROMPT_TEMPLATE = """GOAL: Generate a single original tweet that feels auth
 Topic: "{topic}"
 SUCCESS CRITERIA:  
 - Output must be exactly one tweet, no preamble or extra text.  
-- Tone: conversational, human, and natural—not corporate, essay-like, or overly polished.  
-- Humor, wit, light sarcasm or emojis may be included if it flows naturally.  
+- Tone: conversational, human, and natural, not corporate, essay-like, or overly polished.  
+- Humor, wit, puns or emojis may be included if it flows naturally.  
 - Absolutely avoid clichés (e.g., “resilience is bouncing back,” “learning is a journey”).
 - Strictly no em dashes, en dashes. 
 - Must feel like something a real person would post, not marketing copy or promotional language.  
