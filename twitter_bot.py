@@ -126,7 +126,7 @@ Topic: "{topic}"
 SUCCESS CRITERIA:  
 - Output must be exactly one tweet, no preamble or extra text.  
 - Tone: conversational, human, and natural, not corporate, essay-like, or overly polished.  
-- Wit, or emojis may be included if it flows naturally.  
+- Humor or emojis may be included if it flows naturally.  
 - Absolutely avoid clichés (e.g., “resilience is bouncing back,” “learning is a journey”).
 - Strictly no em dashes or en dashes. 
 - Must feel like something a real person would post, not marketing copy or promotional language.  
