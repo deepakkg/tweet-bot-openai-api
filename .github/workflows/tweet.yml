@@ -19,29 +19,51 @@ jobs:
       cancel-in-progress: true
 
     env:
-      # Secrets
+      # --- Secrets (put these in Repository > Settings > Secrets) ---
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
       TWITTER_API_KEY: ${{ secrets.TWITTER_API_KEY }}
       TWITTER_API_SECRET: ${{ secrets.TWITTER_API_SECRET }}
       TWITTER_ACCESS_TOKEN: ${{ secrets.TWITTER_ACCESS_TOKEN }}
       TWITTER_ACCESS_TOKEN_SECRET: ${{ secrets.TWITTER_ACCESS_TOKEN_SECRET }}
-      # Vars (with safe defaults)
-      OPENAI_MODEL: ${{ vars.OPENAI_MODEL || 'gpt-5-nano' }}
-      FALLBACK_MODEL: ${{ vars.FALLBACK_MODEL || 'gpt-4o-mini' }}
-      OPENAI_MAX_COMPLETION_TOKENS: ${{ vars.OPENAI_MAX_COMPLETION_TOKENS || 120 }}
-      TWEET_TOPICS: ${{ vars.TWEET_TOPICS }}
-      TWEET_TIMES_IST: ${{ vars.TWEET_TIMES_IST || '09:15,17:15' }}
-      LOGLEVEL: ${{ vars.LOGLEVEL || 'INFO' }}
+
+      # --- OpenAI / Model (defaults) ---
+      OPENAI_MODEL: ${{ vars.OPENAI_MODEL || 'gpt-4o-mini' }}
+      OPENAI_MAX_COMPLETION_TOKENS: ${{ vars.OPENAI_MAX_COMPLETION_TOKENS || '120' }}
       OPENAI_USE_MODERATION: ${{ vars.OPENAI_USE_MODERATION || 'true' }}
-      DRY_RUN: ${{ vars.DRY_RUN || 'false' }}
-      RUN_ONCE: "true"
+
+      # --- Core behavior ---
+      DRY_RUN: ${{ vars.DRY_RUN || 'false' }}           # true => print only, don't post
+      RUN_ONCE: "true"                                 # keep true for Actions runs (prevents long-running scheduler)
+      MAX_RETRIES: ${{ vars.MAX_RETRIES || '6' }}
+
+      # --- Topics & schedule ---
+      TWEET_TOPICS: ${{ vars.TWEET_TOPICS || 'productivity,leadership,learning,writing,craftsmanship,critical thinking,calm focus,habits' }}
+      TWEET_TIMES_IST: ${{ vars.TWEET_TIMES_IST || '09:15,17:15' }}
+
+      # --- Novelty + creativity controls ---
+      CANDIDATE_COUNT: ${{ vars.CANDIDATE_COUNT || '6' }}
+      SIMILARITY_THRESHOLD: ${{ vars.SIMILARITY_THRESHOLD || '0.78' }}
+      EMBED_MODEL: ${{ vars.EMBED_MODEL || 'text-embedding-3-small' }}
+      GEN_TEMPERATURE: ${{ vars.GEN_TEMPERATURE || '0.85' }}
+      GEN_TOP_P: ${{ vars.GEN_TOP_P || '0.95' }}
+
+      # --- Style variation ---
+      # Format: "style_name:weight,style_name:weight,..."
+      STYLE_WEIGHTS: ${{ vars.STYLE_WEIGHTS || 'observational:0.4,micro-story:0.2,contrarian:0.15,question:0.15,tip:0.1' }}
+
+      # --- Logging / paths ---
+      TWEET_LOG_PATH: ${{ vars.TWEET_LOG_PATH || 'tweets_log.jsonl' }}
+
+      # --- Misc ---
+      LOGLEVEL: ${{ vars.LOGLEVEL || 'INFO' }}
+      TZ: "Asia/Kolkata"
 
     steps:
       - name: Checkout
-        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11  # v4
+        uses: actions/checkout@v4
 
       - name: Set up Python
-        uses: actions/setup-python@82c7e631bb3cdc910f68e0081d67478d79c6982d  # v5
+        uses: actions/setup-python@v5
         with:
           python-version: '3.11'
           cache: 'pip'
