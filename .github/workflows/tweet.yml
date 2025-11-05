@@ -1,4 +1,4 @@
-name: tweet-bot
+name: tweet-bot (persist logs)
 
 on:
   workflow_dispatch: {}
@@ -7,8 +7,9 @@ on:
     - cron: '45 3 * * *'
     - cron: '45 11 * * *'
 
+# Need write permission to push commit back to repo
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   tweet:
@@ -19,29 +20,50 @@ jobs:
       cancel-in-progress: true
 
     env:
-      # Secrets
+      # --- Secrets (set under Repository → Settings → Secrets) ---
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
       TWITTER_API_KEY: ${{ secrets.TWITTER_API_KEY }}
       TWITTER_API_SECRET: ${{ secrets.TWITTER_API_SECRET }}
       TWITTER_ACCESS_TOKEN: ${{ secrets.TWITTER_ACCESS_TOKEN }}
       TWITTER_ACCESS_TOKEN_SECRET: ${{ secrets.TWITTER_ACCESS_TOKEN_SECRET }}
-      # Vars (with safe defaults)
-      OPENAI_MODEL: ${{ vars.OPENAI_MODEL || 'gpt-5-nano' }}
-      FALLBACK_MODEL: ${{ vars.FALLBACK_MODEL || 'gpt-4o-mini' }}
-      OPENAI_MAX_COMPLETION_TOKENS: ${{ vars.OPENAI_MAX_COMPLETION_TOKENS || 120 }}
-      TWEET_TOPICS: ${{ vars.TWEET_TOPICS }}
-      TWEET_TIMES_IST: ${{ vars.TWEET_TIMES_IST || '09:15,17:15' }}
-      LOGLEVEL: ${{ vars.LOGLEVEL || 'INFO' }}
+
+      # --- OpenAI / Model settings ---
+      OPENAI_MODEL: ${{ vars.OPENAI_MODEL || 'gpt-4o-mini' }}
+      OPENAI_MAX_COMPLETION_TOKENS: ${{ vars.OPENAI_MAX_COMPLETION_TOKENS || '120' }}
       OPENAI_USE_MODERATION: ${{ vars.OPENAI_USE_MODERATION || 'true' }}
+
+      # --- Core behavior ---
       DRY_RUN: ${{ vars.DRY_RUN || 'false' }}
-      RUN_ONCE: "true"
+      RUN_ONCE: "true"           # one-time run for GitHub Actions (prevents persistent scheduler)
+      MAX_RETRIES: ${{ vars.MAX_RETRIES || '6' }}
+
+      # --- Topics & schedule ---
+      TWEET_TOPICS: ${{ vars.TWEET_TOPICS || 'productivity,leadership,learning,writing,craftsmanship,critical thinking,calm focus,habits' }}
+      TWEET_TIMES_IST: ${{ vars.TWEET_TIMES_IST || '09:15,17:15' }}
+
+      # --- Novelty & creativity controls ---
+      CANDIDATE_COUNT: ${{ vars.CANDIDATE_COUNT || '6' }}
+      SIMILARITY_THRESHOLD: ${{ vars.SIMILARITY_THRESHOLD || '0.78' }}
+      EMBED_MODEL: ${{ vars.EMBED_MODEL || 'text-embedding-3-small' }}
+      GEN_TEMPERATURE: ${{ vars.GEN_TEMPERATURE || '0.85' }}
+      GEN_TOP_P: ${{ vars.GEN_TOP_P || '0.95' }}
+
+      # --- Style rotation ---
+      STYLE_WEIGHTS: ${{ vars.STYLE_WEIGHTS || 'observational:0.4,micro-story:0.2,contrarian:0.15,question:0.15,tip:0.1' }}
+
+      # --- Logging & misc ---
+      TWEET_LOG_PATH: ${{ vars.TWEET_LOG_PATH || 'tweets_log.jsonl' }}
+      LOGLEVEL: ${{ vars.LOGLEVEL || 'INFO' }}
+      TZ: "Asia/Kolkata"
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11  # v4
+      - name: Checkout (fetch full history)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # full history to allow proper push / branch operations
 
       - name: Set up Python
-        uses: actions/setup-python@82c7e631bb3cdc910f68e0081d67478d79c6982d  # v5
+        uses: actions/setup-python@v5
         with:
           python-version: '3.11'
           cache: 'pip'
@@ -73,4 +95,45 @@ jobs:
           PY
 
       - name: Run bot (single post)
-        run: python twitter_bot.py
+        id: run_bot
+        run: |
+          python twitter_bot.py
+
+      # --- Persist the log back to the repository ---
+      - name: Commit tweet log back to repo
+        if: always()   # run even if previous step failed; commit will only happen if file changed
+        env:
+          GIT_AUTHOR_NAME: "github-actions[bot]"
+          GIT_AUTHOR_EMAIL: "41898282+github-actions[bot]@users.noreply.github.com"
+        run: |
+          set -e
+          # configure git author
+          git config user.name "${GIT_AUTHOR_NAME}"
+          git config user.email "${GIT_AUTHOR_EMAIL}"
+
+          # Ensure the file exists (bot may not create it if DRY_RUN and nothing generated)
+          if [ ! -f tweets_log.jsonl ]; then
+            echo "tweets_log.jsonl not found, creating empty placeholder"
+            echo "[]" > tweets_log.jsonl
+            git add tweets_log.jsonl
+            git commit -m "chore(tweets): init tweets_log.jsonl [skip ci]" || echo "No changes to commit"
+            git push origin HEAD:${{ github.ref_name }} || echo "Push failed; possibly a protected branch"
+            exit 0
+          fi
+
+          # Add and commit only if changes exist
+          git add tweets_log.jsonl || true
+          # Use a commit message that skips CI to avoid retrigger loops
+          if git diff --staged --quiet; then
+            echo "No changes to tweets_log.jsonl; nothing to commit"
+          else
+            git commit -m "chore(tweets): update tweets_log.jsonl [skip ci]" || echo "Commit failed"
+            # Push back to the same ref (branch) that triggered the workflow
+            # Note: push may fail on protected branches; ensure appropriate permissions / branch rules
+            git push origin HEAD:${{ github.ref_name }} || echo "Push failed; check branch protections or permissions"
+          fi
+
+      - name: Show commit status
+        if: always()
+        run: |
+          echo "Workflow run: ${{ github.run_id }} complete. Check repository for updated tweets_log.jsonl (if commit was successful)."
