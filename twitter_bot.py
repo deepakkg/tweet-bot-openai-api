@@ -75,6 +75,11 @@ GEN_TEMPERATURE = float(os.getenv("GEN_TEMPERATURE", "0.85"))
 GEN_TOP_P = float(os.getenv("GEN_TOP_P", "0.95"))
 OPENAI_MAX_COMPLETION_TOKENS = int(os.getenv("OPENAI_MAX_COMPLETION_TOKENS", "120"))
 
+# ---------- Style cooldown / anti-repetition across runs ----------
+STYLE_COOLDOWN_ENABLED = os.getenv("STYLE_COOLDOWN_ENABLED", "true").strip().lower() in {"1", "true", "yes", "y"}
+STYLE_COOLDOWN_WINDOW = int(os.getenv("STYLE_COOLDOWN_WINDOW", "1"))  # avoid this many last styles
+STYLE_PICK_RETRIES = int(os.getenv("STYLE_PICK_RETRIES", "6"))        # attempts to sample a non-repeating style
+
 # Style weights (env var format):
 # STYLE_WEIGHTS="observational:0.4,micro-story:0.2,contrarian:0.15,question:0.15,tip:0.1"
 STYLE_WEIGHTS_RAW = os.getenv(
@@ -169,10 +174,57 @@ STYLE_PROMPTS = {
     "tip": "A crisp, unexpected practical tip related to the topic, short and actionable."
 }
 
+def _load_recent_style_prompts(limit: int = 1) -> List[str]:
+    """
+    Read the last `limit` style_prompt values from the tweets_log.jsonl file (most recent first).
+    Returns a list of style keys (the keys used in STYLE_PROMPTS or the raw prompt string).
+    """
+    if not os.path.exists(LOG_PATH):
+        return []
+    found: List[str] = []
+    try:
+        with open(LOG_PATH, "r", encoding="utf-8") as f:
+            lines = f.readlines()[-(limit * 5 + 10):]
+            for line in reversed(lines):
+                if not line.strip():
+                    continue
+                try:
+                    obj = json.loads(line)
+                except Exception:
+                    continue
+                sp = obj.get("style_prompt") or obj.get("style") or obj.get("style_name")
+                if sp:
+                    for key, prompt_text in STYLE_PROMPTS.items():
+                        if sp == key or sp == prompt_text or sp.startswith(key):
+                            sp = key
+                            break
+                    if sp not in found:
+                        found.append(sp)
+                if len(found) >= limit:
+                    break
+    except Exception:
+        log.warning("Failed to read recent style prompts from log file")
+    return found
+
 def pick_style_prompt() -> str:
+    """
+    Choose a style prompt while avoiding recent styles if STYLE_COOLDOWN_ENABLED.
+    Will try up to STYLE_PICK_RETRIES times to sample a style not in the recent set.
+    """
     choices = [b["style"] for b in STYLE_BUCKETS]
     weights = [b["weight"] for b in STYLE_BUCKETS]
-    chosen = random.choices(choices, weights=weights, k=1)[0]
+
+    avoid: List[str] = []
+    if STYLE_COOLDOWN_ENABLED and STYLE_COOLDOWN_WINDOW > 0:
+        avoid = _load_recent_style_prompts(limit=STYLE_COOLDOWN_WINDOW)
+
+    chosen = None
+    for attempt in range(max(1, STYLE_PICK_RETRIES)):
+        chosen = random.choices(choices, weights=weights, k=1)[0]
+        if chosen not in avoid:
+            return STYLE_PROMPTS.get(chosen, chosen)
+
+    log.info(f"Style cooldown couldn't find a new style after {STYLE_PICK_RETRIES} tries; using '{chosen}' anyway.")
     return STYLE_PROMPTS.get(chosen, chosen)
 
 # ------------- Prompt builder -------------
