@@ -51,6 +51,12 @@ jobs:
       # --- Style rotation ---
       STYLE_WEIGHTS: ${{ vars.STYLE_WEIGHTS || 'observational:0.4,micro-story:0.2,contrarian:0.15,question:0.15,tip:0.1' }}
 
+      # --- Style cooldown / anti-repetition ---
+      STYLE_COOLDOWN_ENABLED: ${{ vars.STYLE_COOLDOWN_ENABLED || 'true' }}
+      STYLE_COOLDOWN_WINDOW: ${{ vars.STYLE_COOLDOWN_WINDOW || '1' }}
+      STYLE_PICK_RETRIES: ${{ vars.STYLE_PICK_RETRIES || '6' }}
+
+
       # --- Logging & misc ---
       TWEET_LOG_PATH: ${{ vars.TWEET_LOG_PATH || 'tweets_log.jsonl' }}
       LOGLEVEL: ${{ vars.LOGLEVEL || 'INFO' }}
