@@ -232,9 +232,9 @@ USER_PROMPT_TEMPLATE = """GOAL: Generate a single original tweet that feels auth
 Topic: "{topic}"
 SUCCESS CRITERIA:
 - Output must be exactly one tweet, no preamble or extra text.
-- Tone: conversational, human, and natural, not corporate, essay-like, or overly polished.
+- Tone: conversational, human, and natural, not corporate, essay-like, banal, profound, or overly polished.
 - Humor or emojis may be included if it flows naturally.
-- Absolutely avoid clichés (e.g., "resilience is bouncing back", "learning is a journey").
+- Absolutely avoid em dashes and clichés (e.g., "resilience is bouncing back", "learning is a journey").
 - Must include a concrete sensory detail or a brief image.
 CONSTRAINTS:
 - Strictly under 280 characters.
@@ -513,7 +513,7 @@ def generate_and_post():
             if DRY_RUN:
                 log.info(f"DRY_RUN enabled, would have tweeted: {text}")
             else:
-                resp = twitter.create_tweet(text=text)
+                resp = twitter.create_tweet(text=text + " #botWrites")
                 # resp.data may be dict-like or object
                 try:
                     tweet_id = resp.data["id"]
