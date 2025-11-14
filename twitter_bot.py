@@ -234,10 +234,11 @@ SUCCESS CRITERIA:
 - Output must be exactly one tweet, no preamble or extra text.
 - Tone: conversational, human, and natural, not corporate, essay-like, banal, profound, or overly polished.
 - Humor or emojis may be included if it flows naturally.
-- Absolutely avoid em dashes and clichés (e.g., "resilience is bouncing back", "learning is a journey").
+- Absolutely avoid clichés (e.g., "resilience is bouncing back", "learning is a journey").
 - Must include a concrete sensory detail or a brief image.
 CONSTRAINTS:
 - Strictly under 280 characters.
+- No em dashes.
 - No negative parallelisms, no hashtags unless explicitly requested, no bullet lists.
 - Do not return multiple options—only one tweet.
 OUTPUT FORMAT:
