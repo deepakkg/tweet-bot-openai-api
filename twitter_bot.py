@@ -236,9 +236,10 @@ SUCCESS CRITERIA:
 - Humor or emojis may be included if it flows naturally.
 - Absolutely avoid clichés (e.g., "resilience is bouncing back", "learning is a journey").
 - Must include a concrete sensory detail or a brief image.
+- Strictly no em dashes.
 CONSTRAINTS:
+- No tweet about babies, kids, toddlers, grandparents.
 - Strictly under 280 characters.
-- No em dashes.
 - No negative parallelisms, no hashtags unless explicitly requested, no bullet lists.
 - Do not return multiple options—only one tweet.
 OUTPUT FORMAT:
