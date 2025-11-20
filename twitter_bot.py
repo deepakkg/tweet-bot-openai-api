@@ -238,7 +238,7 @@ SUCCESS CRITERIA:
 - Must include a concrete sensory detail or a brief image.
 - Strictly no em dashes.
 CONSTRAINTS:
-- No tweet about babies, kids, toddlers, grandparents.
+- No tweet about babies, kids, pets, cats, dogs, toddlers, grandparents.
 - Strictly under 280 characters.
 - No negative parallelisms, no hashtags unless explicitly requested, no bullet lists.
 - Do not return multiple options—only one tweet.
