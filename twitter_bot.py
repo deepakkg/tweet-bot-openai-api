@@ -72,6 +72,7 @@ STATE_RECENT_LIMIT = int(os.getenv("STATE_RECENT_LIMIT", "30"))
 # Novelty / generation params (env-driven)
 CANDIDATE_COUNT = int(os.getenv("CANDIDATE_COUNT", "6"))
 SIMILARITY_THRESHOLD = float(os.getenv("SIMILARITY_THRESHOLD", "0.78"))  # higher => allow more similarity; lower => stricter novelty
+ALLOW_SIMILAR_FALLBACK = os.getenv("ALLOW_SIMILAR_FALLBACK", "true").strip().lower() in {"1", "true", "yes", "y"}
 EMBED_MODEL = os.getenv("EMBED_MODEL", "text-embedding-3-small")
 GEN_TEMPERATURE = float(os.getenv("GEN_TEMPERATURE", "0.85"))
 GEN_TOP_P = float(os.getenv("GEN_TOP_P", "0.95"))
@@ -436,7 +437,7 @@ def generate_candidates(client, topic: str, style_prompt: str, n: int = CANDIDAT
             candidates.append({"text": text, "temp": temp, "top_p": top_p})
     return candidates
 
-def pick_most_novel(candidates: List[Dict], recent_texts: List[str]) -> Optional[Dict]:
+def pick_most_novel(candidates: List[Dict], recent_texts: List[str], enforce_similarity_threshold: bool = True) -> Optional[Dict]:
     # basic safety/length filter first
     filtered = []
     for c in candidates:
@@ -476,7 +477,7 @@ def pick_most_novel(candidates: List[Dict], recent_texts: List[str]) -> Optional
     # require best candidate to be sufficiently novel relative to threshold
     best = scored[0]
     # interpret threshold: we want max_sim_recent to be < SIMILARITY_THRESHOLD
-    if best["max_sim_recent"] >= SIMILARITY_THRESHOLD:
+    if enforce_similarity_threshold and best["max_sim_recent"] >= SIMILARITY_THRESHOLD:
         return None
     return best
 
@@ -486,7 +487,17 @@ def generate_best_tweet_for_topic(client, topic: str) -> Optional[Dict]:
     recent_texts = load_recent_texts(limit=50)
     candidates = generate_candidates(client, topic, style_prompt, n=CANDIDATE_COUNT)
     log.debug(f"Generated {len(candidates)} candidates for topic '{topic}' (style='{style_prompt}')")
-    chosen = pick_most_novel(candidates, recent_texts)
+    chosen = pick_most_novel(candidates, recent_texts, enforce_similarity_threshold=True)
+    if not chosen and ALLOW_SIMILAR_FALLBACK:
+        relaxed = pick_most_novel(candidates, recent_texts, enforce_similarity_threshold=False)
+        if relaxed:
+            log.info(
+                "No candidate met similarity threshold %.2f; selecting best valid candidate "
+                "with max_sim_recent=%.3f",
+                SIMILARITY_THRESHOLD,
+                relaxed.get("max_sim_recent", 0.0),
+            )
+            chosen = relaxed
     if chosen:
         chosen["style_prompt"] = style_prompt
         log_tweet_entry({
@@ -507,7 +518,17 @@ def generate_best_tweet_for_topic(client, topic: str) -> Optional[Dict]:
         text = generate_candidate_once(client, base_prompt, temperature=fallback_temp, top_p=GEN_TOP_P)
         if text:
             fallback_candidates.append({"text": " ".join(text.splitlines()).strip(), "temp": fallback_temp, "top_p": GEN_TOP_P})
-    chosen = pick_most_novel(fallback_candidates, recent_texts)
+    chosen = pick_most_novel(fallback_candidates, recent_texts, enforce_similarity_threshold=True)
+    if not chosen and ALLOW_SIMILAR_FALLBACK:
+        relaxed = pick_most_novel(fallback_candidates, recent_texts, enforce_similarity_threshold=False)
+        if relaxed:
+            log.info(
+                "Fallback candidates still above threshold %.2f; selecting best valid fallback "
+                "with max_sim_recent=%.3f",
+                SIMILARITY_THRESHOLD,
+                relaxed.get("max_sim_recent", 0.0),
+            )
+            chosen = relaxed
     if chosen:
         chosen["style_prompt"] = style_prompt + " (fallback)"
         log_tweet_entry({
