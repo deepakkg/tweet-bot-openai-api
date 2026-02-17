@@ -76,6 +76,7 @@ EMBED_MODEL = os.getenv("EMBED_MODEL", "text-embedding-3-small")
 GEN_TEMPERATURE = float(os.getenv("GEN_TEMPERATURE", "0.85"))
 GEN_TOP_P = float(os.getenv("GEN_TOP_P", "0.95"))
 OPENAI_MAX_COMPLETION_TOKENS = int(os.getenv("OPENAI_MAX_COMPLETION_TOKENS", "120"))
+RESPONSES_SUPPORTS_SAMPLING = os.getenv("OPENAI_USE_SAMPLING_PARAMS", "true").strip().lower() in {"1", "true", "yes", "y"}
 
 # ---------- Style cooldown / anti-repetition across runs ----------
 STYLE_COOLDOWN_ENABLED = os.getenv("STYLE_COOLDOWN_ENABLED", "true").strip().lower() in {"1", "true", "yes", "y"}
@@ -386,12 +387,39 @@ def generate_candidate_once(client, prompt: str, temperature: float, top_p: floa
     """
     Call Responses API once and return a single text candidate (stripped).
     """
+    global RESPONSES_SUPPORTS_SAMPLING
+    base_kwargs = {
+        "model": OPENAI_MODEL,
+        "input": prompt,
+        "max_output_tokens": OPENAI_MAX_COMPLETION_TOKENS,
+    }
+    req_kwargs = dict(base_kwargs)
+    if RESPONSES_SUPPORTS_SAMPLING:
+        req_kwargs["temperature"] = temperature
+        req_kwargs["top_p"] = top_p
+
     try:
-        resp = responses_create(client, model=OPENAI_MODEL, input=prompt, temperature=temperature, top_p=top_p, max_output_tokens=OPENAI_MAX_COMPLETION_TOKENS)
+        resp = responses_create(client, **req_kwargs)
         text = get_text_from_response(resp)
         if text:
             return text.strip()
     except Exception as e:
+        message = str(e).lower()
+        sampling_not_supported = (
+            RESPONSES_SUPPORTS_SAMPLING and
+            "unsupported parameter" in message and
+            ("temperature" in message or "top_p" in message)
+        )
+        if sampling_not_supported:
+            log.warning("Model rejected temperature/top_p. Retrying without sampling params for this run.")
+            RESPONSES_SUPPORTS_SAMPLING = False
+            try:
+                resp = responses_create(client, **base_kwargs)
+                text = get_text_from_response(resp)
+                if text:
+                    return text.strip()
+            except Exception as retry_err:
+                log.warning(f"Generation retry without sampling failed: {retry_err}")
         log.warning(f"Generation call failed: {e}")
     return None
 
