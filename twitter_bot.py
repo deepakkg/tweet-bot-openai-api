@@ -53,7 +53,7 @@ IST = pytz.timezone("Asia/Kolkata")
 DRY_RUN = os.getenv("DRY_RUN", "false").strip().lower() in {"1", "true", "yes", "y"}
 RUN_ONCE = os.getenv("RUN_ONCE", "false").strip().lower() in {"1", "true", "yes", "y"}
 
-OPENAI_MODEL = "gpt-4o-mini"  # ✅ Hardwired
+OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
 MAX_RETRIES = int(os.getenv("MAX_RETRIES", "6"))
 USE_MODERATION = os.getenv("OPENAI_USE_MODERATION", "true").strip().lower() in {"1", "true", "yes", "y"}
 
@@ -66,6 +66,8 @@ TIMES = [t.strip() for t in TWEET_TIMES_IST.split(",") if t.strip()]
 
 # Logging / persistence
 LOG_PATH = os.getenv("TWEET_LOG_PATH", "tweets_log.jsonl")
+STATE_PATH = os.getenv("TWEET_STATE_PATH", "tweet_state.json")
+STATE_RECENT_LIMIT = int(os.getenv("STATE_RECENT_LIMIT", "30"))
 
 # Novelty / generation params (env-driven)
 CANDIDATE_COUNT = int(os.getenv("CANDIDATE_COUNT", "6"))
@@ -174,37 +176,22 @@ STYLE_PROMPTS = {
     "tip": "A crisp, unexpected practical tip related to the topic, short and actionable."
 }
 
+def normalize_style_key(style_value: str) -> str:
+    if not style_value:
+        return ""
+    for key, prompt_text in STYLE_PROMPTS.items():
+        if style_value == key or style_value == prompt_text or style_value.startswith(key):
+            return key
+    return style_value
+
 def _load_recent_style_prompts(limit: int = 1) -> List[str]:
     """
-    Read the last `limit` style_prompt values from the tweets_log.jsonl file (most recent first).
-    Returns a list of style keys (the keys used in STYLE_PROMPTS or the raw prompt string).
+    Read the last `limit` style values from persisted state (most recent first).
+    Returns normalized style keys.
     """
-    if not os.path.exists(LOG_PATH):
-        return []
-    found: List[str] = []
-    try:
-        with open(LOG_PATH, "r", encoding="utf-8") as f:
-            lines = f.readlines()[-(limit * 5 + 10):]
-            for line in reversed(lines):
-                if not line.strip():
-                    continue
-                try:
-                    obj = json.loads(line)
-                except Exception:
-                    continue
-                sp = obj.get("style_prompt") or obj.get("style") or obj.get("style_name")
-                if sp:
-                    for key, prompt_text in STYLE_PROMPTS.items():
-                        if sp == key or sp == prompt_text or sp.startswith(key):
-                            sp = key
-                            break
-                    if sp not in found:
-                        found.append(sp)
-                if len(found) >= limit:
-                    break
-    except Exception:
-        log.warning("Failed to read recent style prompts from log file")
-    return found
+    state = load_state()
+    recent_styles = [normalize_style_key(s) for s in state.get("recent_styles", []) if s]
+    return list(reversed(recent_styles[-limit:])) if limit > 0 else []
 
 def pick_style_prompt() -> str:
     """
@@ -250,24 +237,47 @@ def build_user_prompt(topic: str, style_prompt: str) -> str:
     return f"{USER_PROMPT_TEMPLATE}\nTone/style: {style_prompt}\nTopic: {safe_topic}\nTweet:"
 
 # ------------- Persistence helpers -------------
-def load_recent_texts(limit=50) -> List[str]:
-    if not os.path.exists(LOG_PATH):
-        return []
-    texts = []
+def load_state() -> Dict:
+    default = {"recent_texts": [], "recent_styles": []}
+    if not os.path.exists(STATE_PATH):
+        return default
     try:
-        with open(LOG_PATH, "r", encoding="utf-8") as f:
-            # read last N lines efficiently
-            lines = f.readlines()[-limit:]
-            for line in reversed(lines):
-                try:
-                    obj = json.loads(line)
-                    if "text" in obj:
-                        texts.append(obj["text"])
-                except Exception:
-                    continue
+        with open(STATE_PATH, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        recent_texts = [t for t in data.get("recent_texts", []) if isinstance(t, str) and t.strip()]
+        recent_styles = [s for s in data.get("recent_styles", []) if isinstance(s, str) and s.strip()]
+        return {"recent_texts": recent_texts, "recent_styles": recent_styles}
     except Exception as e:
-        log.warning(f"Failed to load recent texts: {e}")
-    return texts
+        log.warning(f"Failed to read state file '{STATE_PATH}': {e}")
+        return default
+
+def save_state(state: Dict):
+    safe_state = {
+        "recent_texts": state.get("recent_texts", [])[-STATE_RECENT_LIMIT:],
+        "recent_styles": state.get("recent_styles", [])[-STATE_RECENT_LIMIT:],
+        "updated_at": datetime.utcnow().isoformat() + "Z",
+    }
+    try:
+        with open(STATE_PATH, "w", encoding="utf-8") as f:
+            json.dump(safe_state, f, ensure_ascii=False, indent=2)
+            f.write("\n")
+    except Exception as e:
+        log.warning(f"Failed to write state file '{STATE_PATH}': {e}")
+
+def update_state_with_tweet(text: str, style_prompt: str):
+    state = load_state()
+    state.setdefault("recent_texts", [])
+    state.setdefault("recent_styles", [])
+    state["recent_texts"].append(text)
+    state["recent_styles"].append(normalize_style_key(style_prompt))
+    save_state(state)
+
+def load_recent_texts(limit=50) -> List[str]:
+    state = load_state()
+    texts = [t for t in state.get("recent_texts", []) if t]
+    if not texts:
+        return []
+    return list(reversed(texts[-limit:]))
 
 def log_tweet_entry(entry: Dict):
     entry.setdefault("timestamp", datetime.utcnow().isoformat() + "Z")
@@ -450,6 +460,7 @@ def generate_best_tweet_for_topic(client, topic: str) -> Optional[Dict]:
     log.debug(f"Generated {len(candidates)} candidates for topic '{topic}' (style='{style_prompt}')")
     chosen = pick_most_novel(candidates, recent_texts)
     if chosen:
+        chosen["style_prompt"] = style_prompt
         log_tweet_entry({
             "text": chosen["text"],
             "topic": topic,
@@ -470,6 +481,7 @@ def generate_best_tweet_for_topic(client, topic: str) -> Optional[Dict]:
             fallback_candidates.append({"text": " ".join(text.splitlines()).strip(), "temp": fallback_temp, "top_p": GEN_TOP_P})
     chosen = pick_most_novel(fallback_candidates, recent_texts)
     if chosen:
+        chosen["style_prompt"] = style_prompt + " (fallback)"
         log_tweet_entry({
             "text": chosen["text"],
             "topic": topic,
@@ -528,6 +540,7 @@ def generate_and_post():
                     log.info(f"Tweet posted: https://twitter.com/i/web/status/{tweet_id}")
                 else:
                     log.info(f"Tweet posted (id not extracted), resp: {resp}")
+            update_state_with_tweet(text, chosen.get("style_prompt", ""))
             return
         except Exception as e:
             log.warning(f"Validation/post attempt {attempt+1} failed: {e}")
@@ -557,4 +570,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

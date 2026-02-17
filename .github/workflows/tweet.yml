@@ -1,4 +1,4 @@
-name: tweet-bot (persist logs)
+name: tweet-bot (artifact logs + compact state)
 
 on:
   workflow_dispatch: {}
@@ -7,7 +7,7 @@ on:
     - cron: '45 3 * * *'
     - cron: '45 11 * * *'
 
-# Need write permission to push commit back to repo
+# Need write permission to push compact state back to repo
 permissions:
   contents: write
 
@@ -59,6 +59,8 @@ jobs:
 
       # --- Logging & misc ---
       TWEET_LOG_PATH: ${{ vars.TWEET_LOG_PATH || 'tweets_log.jsonl' }}
+      TWEET_STATE_PATH: ${{ vars.TWEET_STATE_PATH || 'tweet_state.json' }}
+      STATE_RECENT_LIMIT: ${{ vars.STATE_RECENT_LIMIT || '30' }}
       LOGLEVEL: ${{ vars.LOGLEVEL || 'INFO' }}
       TZ: "Asia/Kolkata"
 
@@ -105,41 +107,41 @@ jobs:
         run: |
           python twitter_bot.py
 
-      # --- Persist the log back to the repository ---
-      - name: Commit tweet log back to repo
-        if: always()   # run even if previous step failed; commit will only happen if file changed
+      - name: Upload tweet log as artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tweets-log-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ vars.TWEET_LOG_PATH || 'tweets_log.jsonl' }}
+          if-no-files-found: ignore
+          retention-days: 30
+
+      # --- Persist only compact state back to the repository ---
+      - name: Commit tweet state back to repo
+        if: always()
         env:
           GIT_AUTHOR_NAME: "github-actions[bot]"
           GIT_AUTHOR_EMAIL: "41898282+github-actions[bot]@users.noreply.github.com"
+          STATE_FILE: ${{ vars.TWEET_STATE_PATH || 'tweet_state.json' }}
         run: |
           set -e
-          # configure git author
           git config user.name "${GIT_AUTHOR_NAME}"
           git config user.email "${GIT_AUTHOR_EMAIL}"
 
-          # Ensure the file exists (bot may not create it if DRY_RUN and nothing generated)
-          if [ ! -f tweets_log.jsonl ]; then
-            echo "tweets_log.jsonl not found, creating empty placeholder"
-            echo "[]" > tweets_log.jsonl
-            git add tweets_log.jsonl
-            git commit -m "chore(tweets): init tweets_log.jsonl [skip ci]" || echo "No changes to commit"
-            git push origin HEAD:${{ github.ref_name }} || echo "Push failed; possibly a protected branch"
-            exit 0
+          if [ ! -f "${STATE_FILE}" ]; then
+            echo "State file not found, creating ${STATE_FILE}"
+            printf '{\n  "recent_texts": [],\n  "recent_styles": [],\n  "updated_at": ""\n}\n' > "${STATE_FILE}"
           fi
 
-          # Add and commit only if changes exist
-          git add tweets_log.jsonl || true
-          # Use a commit message that skips CI to avoid retrigger loops
+          git add "${STATE_FILE}" || true
           if git diff --staged --quiet; then
-            echo "No changes to tweets_log.jsonl; nothing to commit"
+            echo "No changes to ${STATE_FILE}; nothing to commit"
           else
-            git commit -m "chore(tweets): update tweets_log.jsonl [skip ci]" || echo "Commit failed"
-            # Push back to the same ref (branch) that triggered the workflow
-            # Note: push may fail on protected branches; ensure appropriate permissions / branch rules
+            git commit -m "chore(tweets): update compact tweet state [skip ci]" || echo "Commit failed"
             git push origin HEAD:${{ github.ref_name }} || echo "Push failed; check branch protections or permissions"
           fi
 
       - name: Show commit status
         if: always()
         run: |
-          echo "Workflow run: ${{ github.run_id }} complete. Check repository for updated tweets_log.jsonl (if commit was successful)."
+          echo "Workflow run: ${{ github.run_id }} complete. tweets_log.jsonl uploaded as artifact; compact state committed if changed."
