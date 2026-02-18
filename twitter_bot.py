@@ -16,7 +16,7 @@ import random
 import re
 import json
 from datetime import datetime
-from typing import Optional, List, Dict
+from typing import Optional, List, Dict, Tuple
 
 import pytz
 import regex
@@ -125,6 +125,23 @@ PII_PATTERNS = {
     "credit_card": r"(?<!\d)(?:\d[ -]*?){13,19}(?!\d)",
 }
 
+def _digits_only(s: str) -> str:
+    return "".join(ch for ch in s if ch.isdigit())
+
+def _is_luhn_valid(number: str) -> bool:
+    if not number.isdigit() or len(number) < 13 or len(number) > 19:
+        return False
+    total = 0
+    reverse_digits = number[::-1]
+    for i, d in enumerate(reverse_digits):
+        n = int(d)
+        if i % 2 == 1:
+            n *= 2
+            if n > 9:
+                n -= 9
+        total += n
+    return (total % 10) == 0
+
 def contains_profanity(text: str) -> Optional[str]:
     for pat in PROFANITY_PATTERNS:
         if regex.search(pat, text):
@@ -133,6 +150,20 @@ def contains_profanity(text: str) -> Optional[str]:
 
 def contains_pii(text: str) -> Optional[str]:
     for label, pat in PII_PATTERNS.items():
+        if label == "phone_generic":
+            for m in re.finditer(pat, text, flags=re.IGNORECASE):
+                digits = _digits_only(m.group(0))
+                # Reduce false positives: require realistic phone length.
+                if 10 <= len(digits) <= 15:
+                    return f"PII:{label}"
+            continue
+        if label == "credit_card":
+            for m in re.finditer(pat, text, flags=re.IGNORECASE):
+                digits = _digits_only(m.group(0))
+                # Reduce false positives by requiring Luhn validity.
+                if _is_luhn_valid(digits):
+                    return f"PII:{label}"
+            continue
         if re.search(pat, text, flags=re.IGNORECASE):
             return f"PII:{label}"
     return None
@@ -437,23 +468,47 @@ def generate_candidates(client, topic: str, style_prompt: str, n: int = CANDIDAT
             candidates.append({"text": text, "temp": temp, "top_p": top_p})
     return candidates
 
-def pick_most_novel(candidates: List[Dict], recent_texts: List[str], enforce_similarity_threshold: bool = True) -> Optional[Dict]:
-    # basic safety/length filter first
-    filtered = []
+def _filter_candidates(candidates: List[Dict]) -> Tuple[List[Dict], Dict[str, int]]:
+    filtered: List[Dict] = []
+    reasons = {
+        "empty": 0,
+        "too_long": 0,
+        "profanity": 0,
+        "pii": 0,
+        "not_meaningful": 0,
+    }
     for c in candidates:
-        t = c["text"].strip()
+        t = (c.get("text") or "").strip()
         if not t:
+            reasons["empty"] += 1
             continue
         if len(t) > 280:
             t = t[:279].rsplit(" ", 1)[0]
-        if contains_profanity(t):
+        if len(t) > 280:
+            reasons["too_long"] += 1
             continue
-        if contains_pii(t):
+        profanity_hit = contains_profanity(t)
+        if profanity_hit:
+            reasons["profanity"] += 1
+            continue
+        pii_hit = contains_pii(t)
+        if pii_hit:
+            reasons["pii"] += 1
             continue
         if not is_meaningful_text(t):
+            reasons["not_meaningful"] += 1
             continue
         filtered.append({**c, "text": t})
+    return filtered, reasons
+
+def pick_most_novel(candidates: List[Dict], recent_texts: List[str], enforce_similarity_threshold: bool = True) -> Optional[Dict]:
+    # basic safety/length filter first
+    filtered, reasons = _filter_candidates(candidates)
     if not filtered:
+        log.warning(
+            "All candidates rejected before novelty scoring. rejection_counts=%s",
+            reasons,
+        )
         return None
 
     # embed recent texts and candidates
