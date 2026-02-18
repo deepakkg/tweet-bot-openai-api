@@ -124,6 +124,7 @@ PII_PATTERNS = {
     "ip_address": r"(?<!\d)(?:\d{1,3}\.){3}\d{1,3}(?!\d)",
     "credit_card": r"(?<!\d)(?:\d[ -]*?){13,19}(?!\d)",
 }
+PII_ENABLE_PHONE_GENERIC = os.getenv("PII_ENABLE_PHONE_GENERIC", "false").strip().lower() in {"1", "true", "yes", "y"}
 
 def _digits_only(s: str) -> str:
     return "".join(ch for ch in s if ch.isdigit())
@@ -148,24 +149,33 @@ def contains_profanity(text: str) -> Optional[str]:
             return "profanity"
     return None
 
-def contains_pii(text: str) -> Optional[str]:
+def detect_pii(text: str) -> Optional[Dict[str, str]]:
     for label, pat in PII_PATTERNS.items():
         if label == "phone_generic":
+            if not PII_ENABLE_PHONE_GENERIC:
+                continue
             for m in re.finditer(pat, text, flags=re.IGNORECASE):
                 digits = _digits_only(m.group(0))
                 # Reduce false positives: require realistic phone length.
                 if 10 <= len(digits) <= 15:
-                    return f"PII:{label}"
+                    return {"label": f"PII:{label}", "snippet": m.group(0)}
             continue
         if label == "credit_card":
             for m in re.finditer(pat, text, flags=re.IGNORECASE):
                 digits = _digits_only(m.group(0))
                 # Reduce false positives by requiring Luhn validity.
                 if _is_luhn_valid(digits):
-                    return f"PII:{label}"
+                    return {"label": f"PII:{label}", "snippet": m.group(0)}
             continue
-        if re.search(pat, text, flags=re.IGNORECASE):
-            return f"PII:{label}"
+        m = re.search(pat, text, flags=re.IGNORECASE)
+        if m:
+            return {"label": f"PII:{label}", "snippet": m.group(0)}
+    return None
+
+def contains_pii(text: str) -> Optional[str]:
+    hit = detect_pii(text)
+    if hit:
+        return hit["label"]
     return None
 
 def length_ok(text: str) -> bool:
@@ -477,6 +487,7 @@ def _filter_candidates(candidates: List[Dict]) -> Tuple[List[Dict], Dict[str, in
         "pii": 0,
         "not_meaningful": 0,
     }
+    pii_labels: Dict[str, int] = {}
     for c in candidates:
         t = (c.get("text") or "").strip()
         if not t:
@@ -491,14 +502,18 @@ def _filter_candidates(candidates: List[Dict]) -> Tuple[List[Dict], Dict[str, in
         if profanity_hit:
             reasons["profanity"] += 1
             continue
-        pii_hit = contains_pii(t)
+        pii_hit = detect_pii(t)
         if pii_hit:
             reasons["pii"] += 1
+            lbl = pii_hit.get("label", "PII:unknown")
+            pii_labels[lbl] = pii_labels.get(lbl, 0) + 1
             continue
         if not is_meaningful_text(t):
             reasons["not_meaningful"] += 1
             continue
         filtered.append({**c, "text": t})
+    if pii_labels:
+        reasons["pii_labels"] = pii_labels
     return filtered, reasons
 
 def pick_most_novel(candidates: List[Dict], recent_texts: List[str], enforce_similarity_threshold: bool = True) -> Optional[Dict]:
