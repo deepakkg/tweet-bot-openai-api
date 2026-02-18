@@ -369,11 +369,14 @@ def get_text_from_response(resp) -> Optional[str]:
                 return "\n".join(texts)
     except Exception:
         pass
-    # final fallback: str(resp)
-    try:
-        return str(resp)
-    except Exception:
-        return None
+    # Do not fallback to stringifying the entire SDK response object.
+    return None
+
+def looks_like_response_dump(text: str) -> bool:
+    if not text:
+        return False
+    t = text.strip()
+    return t.startswith("Response(") or "object='response'" in t or "id='resp_" in t
 
 def embeddings_create(client, input_texts: List[str]) -> List[List[float]]:
     """
@@ -443,7 +446,7 @@ def generate_candidate_once(client, prompt: str, temperature: float, top_p: floa
     try:
         resp = responses_create(client, **req_kwargs)
         text = get_text_from_response(resp)
-        if text:
+        if text and not looks_like_response_dump(text):
             return text.strip()
     except Exception as e:
         message = str(e).lower()
@@ -458,10 +461,12 @@ def generate_candidate_once(client, prompt: str, temperature: float, top_p: floa
             try:
                 resp = responses_create(client, **base_kwargs)
                 text = get_text_from_response(resp)
-                if text:
+                if text and not looks_like_response_dump(text):
                     return text.strip()
             except Exception as retry_err:
                 log.warning(f"Generation retry without sampling failed: {retry_err}")
+        if "incomplete_details" in message and "max_output_tokens" in message:
+            log.warning("Generation returned incomplete output due to max_output_tokens.")
         log.warning(f"Generation call failed: {e}")
     return None
 
@@ -642,6 +647,8 @@ def generate_and_post():
                 raise ValueError("Not meaningful")
             if not passes_moderation(client, text):
                 raise ValueError("Failed moderation")
+            if looks_like_response_dump(text):
+                raise ValueError("Model output was SDK response dump, not tweet text")
 
             if DRY_RUN:
                 log.info(f"DRY_RUN enabled, would have tweeted: {text}")
