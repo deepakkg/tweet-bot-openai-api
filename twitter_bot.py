@@ -213,11 +213,11 @@ def parse_style_weights(raw: str) -> List[Dict]:
 STYLE_BUCKETS = parse_style_weights(STYLE_WEIGHTS_RAW)
 
 STYLE_PROMPTS = {
-    "observational": "Observational humor: short, wry, single twist. Use a tiny, concrete sensory detail (smell, sound). Avoid groan puns.",
-    "micro-story": "A tiny story in one sentence with a mini-arc and a surprising end. Create a character detail.",
-    "contrarian": "Contrarian insight: start with a common belief, then flip it with a concise unexpected twist.",
-    "question": "Start with a hook question then add a short concrete image or insight.",
-    "tip": "A crisp, unexpected practical tip related to the topic, short and actionable."
+    "observational": "Write like someone muttering to themselves at 2 AM. Use lower-case. Focus on a specific, weirdly relatable annoyance. No punchline, just a realization.",
+    "micro-story": "Start in the middle of the action. Use 'I' or 'We'. Describe a specific object (a cracked mug, a sticky receipt). No 'happily ever after'—just a moment.",
+    "contrarian": "Take a niche, annoying opinion. Don't explain it. State it as a personal fact. Avoid the 'Most people think X' setup.",
+    "question": "Ask a question that sounds like a text sent to a friend. No 'Have you ever...' Instead, use 'Is it just me or...' or 'Why does [topic] always...",
+    "tip": "Give a tip that sounds like a 'life hack' you found out by accident. Use casual phrasing like 'Turns out,' or 'Life-changer"
 }
 
 def normalize_style_key(style_value: str) -> str:
@@ -259,20 +259,21 @@ def pick_style_prompt() -> str:
     return STYLE_PROMPTS.get(chosen, chosen)
 
 # ------------- Prompt builder -------------
-USER_PROMPT_TEMPLATE = """GOAL: Generate a single original tweet that feels authentic, casual, and engaging while staying under Twitter’s 280-character limit.
-Topic: "{topic}"
-SUCCESS CRITERIA:
-- Output must be exactly one tweet, no preamble or extra text.
-- Tone: conversational, human, and natural, not corporate, essay-like, banal, profound, or overly polished.
-- Humor or emojis may be included if it flows naturally.
-- Absolutely avoid clichés (e.g., "resilience is bouncing back", "learning is a journey").
-- Must include a concrete sensory detail or a brief image.
-- Strictly no em dashes.
-CONSTRAINTS:
-- No tweet about babies, kids, pets, cats, dogs, toddlers, grandparents.
-- Strictly under 280 characters.
-- No negative parallelisms, no hashtags unless explicitly requested, no bullet lists.
-- Do not return multiple options—only one tweet.
+USER_PROMPT_TEMPLATE = """GOAL: Write a single tweet about "{topic}". 
+
+VOICE & VIBE:
+- Write like a real person on Twitter: casual, slightly sleep-deprived, and specific.
+- Use sentence fragments. Occasionally use lowercase for emphasis.
+- Avoid the "AI Shine": no overly optimistic endings or "inspiring" wrap-ups.
+- Think of a specific, tangible object related to {topic} and mention it.
+
+THE "ABSOLUTELY NOT" LIST:
+- No "Imagine this..." or "Picture a world..."
+- No "In a world where..."
+- No emojis at the end of every sentence. (Max 1, or none).
+- No hashtags.
+- No "LinkedIn" style formatting (one sentence per line).
+
 OUTPUT FORMAT:
 Plain text containing only the tweet. No quotes, labels, or additional commentary."""
 
