@@ -78,6 +78,7 @@ GEN_TEMPERATURE = float(os.getenv("GEN_TEMPERATURE", "0.85"))
 GEN_TOP_P = float(os.getenv("GEN_TOP_P", "0.95"))
 OPENAI_MAX_COMPLETION_TOKENS = int(os.getenv("OPENAI_MAX_COMPLETION_TOKENS", "120"))
 RESPONSES_SUPPORTS_SAMPLING = os.getenv("OPENAI_USE_SAMPLING_PARAMS", "true").strip().lower() in {"1", "true", "yes", "y"}
+OPENAI_REASONING_EFFORT = os.getenv("OPENAI_REASONING_EFFORT", "minimal").strip().lower()
 
 # ---------- Style cooldown / anti-repetition across runs ----------
 STYLE_COOLDOWN_ENABLED = os.getenv("STYLE_COOLDOWN_ENABLED", "true").strip().lower() in {"1", "true", "yes", "y"}
@@ -402,6 +403,20 @@ def looks_like_response_dump(text: str) -> bool:
     t = text.strip()
     return t.startswith("Response(") or "object='response'" in t or "id='resp_" in t
 
+def get_incomplete_reason(resp) -> Optional[str]:
+    try:
+        if isinstance(resp, dict):
+            details = resp.get("incomplete_details") or {}
+            return details.get("reason")
+        details = getattr(resp, "incomplete_details", None)
+        if details is None:
+            return None
+        if isinstance(details, dict):
+            return details.get("reason")
+        return getattr(details, "reason", None)
+    except Exception:
+        return None
+
 def embeddings_create(client, input_texts: List[str]) -> List[List[float]]:
     """
     Wrapper to call embeddings for both SDK variants and return list of embeddings.
@@ -462,6 +477,8 @@ def generate_candidate_once(client, prompt: str, temperature: float, top_p: floa
         "input": prompt,
         "max_output_tokens": OPENAI_MAX_COMPLETION_TOKENS,
     }
+    if OPENAI_REASONING_EFFORT in {"minimal", "low", "medium", "high"}:
+        base_kwargs["reasoning"] = {"effort": OPENAI_REASONING_EFFORT}
     req_kwargs = dict(base_kwargs)
     if RESPONSES_SUPPORTS_SAMPLING:
         req_kwargs["temperature"] = temperature
@@ -472,7 +489,23 @@ def generate_candidate_once(client, prompt: str, temperature: float, top_p: floa
         text = get_text_from_response(resp)
         if text and not looks_like_response_dump(text):
             return text.strip()
-        log.warning("Model response had no extractable text output.")
+        reason = get_incomplete_reason(resp)
+        if reason == "max_output_tokens":
+            expanded_kwargs = dict(base_kwargs)
+            expanded_kwargs["max_output_tokens"] = min(max(OPENAI_MAX_COMPLETION_TOKENS * 3, 240), 800)
+            log.warning(
+                "Model output incomplete due to max_output_tokens=%s. Retrying once with max_output_tokens=%s.",
+                OPENAI_MAX_COMPLETION_TOKENS,
+                expanded_kwargs["max_output_tokens"],
+            )
+            retry_resp = responses_create(client, **expanded_kwargs)
+            retry_text = get_text_from_response(retry_resp)
+            if retry_text and not looks_like_response_dump(retry_text):
+                return retry_text.strip()
+            retry_reason = get_incomplete_reason(retry_resp)
+            log.warning("Retry still had no extractable text output (incomplete_reason=%s).", retry_reason)
+        else:
+            log.warning("Model response had no extractable text output (incomplete_reason=%s).", reason)
     except Exception as e:
         message = str(e).lower()
         sampling_not_supported = (
