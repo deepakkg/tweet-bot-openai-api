@@ -354,6 +354,30 @@ def get_text_from_response(resp) -> Optional[str]:
     except Exception:
         pass
     try:
+        # robust dict/object traversal across output blocks/content entries
+        outputs = None
+        if isinstance(resp, dict):
+            outputs = resp.get("output")
+        else:
+            outputs = getattr(resp, "output", None)
+        if outputs:
+            texts: List[str] = []
+            for block in outputs:
+                content_items = block.get("content", []) if isinstance(block, dict) else getattr(block, "content", [])
+                for item in content_items or []:
+                    if isinstance(item, dict):
+                        t = item.get("text")
+                        if isinstance(t, str) and t.strip():
+                            texts.append(t.strip())
+                    else:
+                        t = getattr(item, "text", None)
+                        if isinstance(t, str) and t.strip():
+                            texts.append(t.strip())
+            if texts:
+                return "\n".join(texts)
+    except Exception:
+        pass
+    try:
         # some SDKs return content blocks
         blocks = getattr(resp, "output", None)
         if blocks:
@@ -448,6 +472,7 @@ def generate_candidate_once(client, prompt: str, temperature: float, top_p: floa
         text = get_text_from_response(resp)
         if text and not looks_like_response_dump(text):
             return text.strip()
+        log.warning("Model response had no extractable text output.")
     except Exception as e:
         message = str(e).lower()
         sampling_not_supported = (
@@ -463,6 +488,7 @@ def generate_candidate_once(client, prompt: str, temperature: float, top_p: floa
                 text = get_text_from_response(resp)
                 if text and not looks_like_response_dump(text):
                     return text.strip()
+                log.warning("Retry response had no extractable text output.")
             except Exception as retry_err:
                 log.warning(f"Generation retry without sampling failed: {retry_err}")
         if "incomplete_details" in message and "max_output_tokens" in message:
@@ -486,6 +512,7 @@ def generate_candidates(client, topic: str, style_prompt: str, n: int = CANDIDAT
 def _filter_candidates(candidates: List[Dict]) -> Tuple[List[Dict], Dict[str, int]]:
     filtered: List[Dict] = []
     reasons = {
+        "no_candidates_generated": 0,
         "empty": 0,
         "too_long": 0,
         "profanity": 0,
@@ -493,6 +520,9 @@ def _filter_candidates(candidates: List[Dict]) -> Tuple[List[Dict], Dict[str, in
         "not_meaningful": 0,
     }
     pii_labels: Dict[str, int] = {}
+    if not candidates:
+        reasons["no_candidates_generated"] = 1
+        return filtered, reasons
     for c in candidates:
         t = (c.get("text") or "").strip()
         if not t:
