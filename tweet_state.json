@@ -1,6 +1,5 @@
 {
   "recent_texts": [
-    "Tiny habit I actually trust: writing one sentence of progress on a sticky note and sticking it to the fridge. self help, but lightweight, no hype. tonight it just says “did something today.” that’s enough. feels… real.",
     "office coffee tastes like recycled deadlines and disappointment, and somehow the foam is the only thing that doesn’t remind me of meetings at 9am, even the stapler seems to sigh when i open the spreadsheet at 2 am.",
     "Is it just me or is AI starting to feel like that one laptop you keep reopening at 2am, only to hear the fan scream and still not know what you’re saving? feels like I’m chasing a flashlight in a blackout with a USB stick.",
     "ai keeps rearranging my thoughts like a stubborn playlist, but the only thing i actually control is the coffee ring on the desk, smeared fingerprints on the keyboard, and a note that says 'ai ideas later' at 3 am.",
@@ -29,10 +28,10 @@
     "Turns out the best way to test an AI's honesty is to feed it a low-stakes lie and watch how fast it corrects you with a screenshot of a calculator. Life-hack: trust but verify, with a literal sticky note on the monitor.",
     "Turns out the corporate rumor mill is loudest near the coffee machine. If you want actual signal, walk to the window and notice who’s missing at 3pm—that’s who’s actually doing the work. Life hack, no drama, just clocked observations.",
     "Vibe coding is just slapping neon gradients on a boring function and calling it a feature. I don’t trust a script that can’t commit to a single variable name. My monitor glare knows more logic than that UI. coffee cup stains tell me more about UX than a mood board.",
-    "Is it just me or does nostalgia hit hardest when you hold a cracked VHS sleeve and remember watching the same cartoon at 3 am? that smell of melted plastic and popcorn still kind of lingers. maybe i should sleep, but this nostalgia won’t press snooze."
+    "Is it just me or does nostalgia hit hardest when you hold a cracked VHS sleeve and remember watching the same cartoon at 3 am? that smell of melted plastic and popcorn still kind of lingers. maybe i should sleep, but this nostalgia won’t press snooze.",
+    "Corporate life is a endless spreadsheet with coffee stains and a calendar that never ends; I measure progress by the half-empty water bottle on my desk and the noise my chair makes when I stand up. No grand finales, just attempts to leave by 6.30."
   ],
   "recent_styles": [
-    "contrarian",
     "observational",
     "question",
     "observational",
@@ -61,7 +60,8 @@
     "tip",
     "tip",
     "contrarian",
-    "question"
+    "question",
+    "contrarian"
   ],
-  "updated_at": "2026-03-19T05:14:09.707855Z"
+  "updated_at": "2026-03-19T12:04:38.616753Z"
 }
