@@ -1,6 +1,5 @@
 {
   "recent_texts": [
-    "We’re mid standup, coffee cooling, a cracked mug in my hand. I’m staring at the whiteboard, the plan starting to wobble. I say it out loud: lead by showing the mess, not pretending it’s neat. We adjust, we pivot, we own the spill.",
     "Booting up at 3 a.m., the hum of the old router keeps me honest. I’m staring at a cracked mug filled with lukewarm coffee, HDMI cables like vines, and a flickering modem that refuses to quit. We chase faster laptops, but the couch still remembers our forgotten tabs.",
     "Turns out the best way to test an AI's honesty is to feed it a low-stakes lie and watch how fast it corrects you with a screenshot of a calculator. Life-hack: trust but verify, with a literal sticky note on the monitor.",
     "Turns out the corporate rumor mill is loudest near the coffee machine. If you want actual signal, walk to the window and notice who’s missing at 3pm—that’s who’s actually doing the work. Life hack, no drama, just clocked observations.",
@@ -29,11 +28,11 @@
     "Is it just me or generative AI keeps making my coffee machine smarter than my own brain, yet I still can’t remember where I left my keys? I swear the little orange lamp on the desk feels more awake than I am today.",
     "Is it just me or does corporate life feel like staring at a blinking fridge light at 3am—endless meetings, a stapler you don’t own, and the coffee cup that never empties?",
     "Turns out the best grammar for learning is a dirty, obvious trick: write it down, then sleep. I typed a page, hit the pillow, woke up with the correction already in the margins. The coffee cup beside the notebook is just there to remind me what I almost forgot to do.",
-    "Is it just me or does AI feel like that coffee mug you swear you’ll sip slowly but ends up empty by noon? steady progress, clumsy glitches, and a dozen tabs open just to explain one sentence. why does it always need a backup plan for my backup plan?"
+    "Is it just me or does AI feel like that coffee mug you swear you’ll sip slowly but ends up empty by noon? steady progress, clumsy glitches, and a dozen tabs open just to explain one sentence. why does it always need a backup plan for my backup plan?",
+    "AI is just spreadsheets with better vanity metrics, and I hate that I keep a sticky note of every failed prompt on my desk lamp. introverts rejoice: the neural net just learned to ignore me too."
   ],
   "recent_styles": [
     "micro-story",
-    "micro-story",
     "tip",
     "tip",
     "contrarian",
@@ -61,7 +60,8 @@
     "question",
     "question",
     "tip",
-    "question"
+    "question",
+    "contrarian"
   ],
-  "updated_at": "2026-03-31T05:30:39.110863Z"
+  "updated_at": "2026-03-31T12:40:36.383566Z"
 }
