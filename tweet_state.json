@@ -1,6 +1,5 @@
 {
   "recent_texts": [
-    "Turns out the best way to test an AI's honesty is to feed it a low-stakes lie and watch how fast it corrects you with a screenshot of a calculator. Life-hack: trust but verify, with a literal sticky note on the monitor.",
     "Turns out the corporate rumor mill is loudest near the coffee machine. If you want actual signal, walk to the window and notice who’s missing at 3pm—that’s who’s actually doing the work. Life hack, no drama, just clocked observations.",
     "Vibe coding is just slapping neon gradients on a boring function and calling it a feature. I don’t trust a script that can’t commit to a single variable name. My monitor glare knows more logic than that UI. coffee cup stains tell me more about UX than a mood board.",
     "Is it just me or does nostalgia hit hardest when you hold a cracked VHS sleeve and remember watching the same cartoon at 3 am? that smell of melted plastic and popcorn still kind of lingers. maybe i should sleep, but this nostalgia won’t press snooze.",
@@ -29,11 +28,11 @@
     "Turns out the best grammar for learning is a dirty, obvious trick: write it down, then sleep. I typed a page, hit the pillow, woke up with the correction already in the margins. The coffee cup beside the notebook is just there to remind me what I almost forgot to do.",
     "Is it just me or does AI feel like that coffee mug you swear you’ll sip slowly but ends up empty by noon? steady progress, clumsy glitches, and a dozen tabs open just to explain one sentence. why does it always need a backup plan for my backup plan?",
     "AI is just spreadsheets with better vanity metrics, and I hate that I keep a sticky note of every failed prompt on my desk lamp. introverts rejoice: the neural net just learned to ignore me too.",
-    "the old flip phone sits on the desk, stuck on vibrate, and i keep tapping the screen like maybe it’ll remember where i put my old playlists, the ones that sounded like rain on a cheap speaker, nostalgia chewing on a gum wrapper and then laughing at me, again."
+    "the old flip phone sits on the desk, stuck on vibrate, and i keep tapping the screen like maybe it’ll remember where i put my old playlists, the ones that sounded like rain on a cheap speaker, nostalgia chewing on a gum wrapper and then laughing at me, again.",
+    "corporate life is a never-ending memo from HR about why your desk plant matters more than your actual work. i water it at 2am, it listens better than my manager anyway. the stapler knows more about collaboration than any meeting ever will."
   ],
   "recent_styles": [
     "tip",
-    "tip",
     "contrarian",
     "question",
     "contrarian",
@@ -61,7 +60,8 @@
     "tip",
     "question",
     "contrarian",
-    "observational"
+    "observational",
+    "contrarian"
   ],
-  "updated_at": "2026-04-01T05:49:05.785200Z"
+  "updated_at": "2026-04-01T12:42:17.407411Z"
 }
